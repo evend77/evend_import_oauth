@@ -8,8 +8,8 @@ import logging
 app = Flask(__name__)
 app.secret_key = 'UN_SECRET_POUR_SESSION'  # ⚠️ change-le en prod
 
-# --- Chemins ---
-BASE_DIR = '/home/evend/evend_import_oauth'
+# --- Chemins relatifs pour Render ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 SELENIUM_SCRIPT = os.path.join(BASE_DIR, 'evend_publish.py')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -17,11 +17,11 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # --- eBay API PROD ---
 EBAY_CLIENT_ID = 'AlexBoss-eVendImp-PRD-bd29c22a7-4a223ad6'
 EBAY_CLIENT_SECRET = 'PRD-d29c22a7bc6d-e864-4ffc-8934-e19a'
-EBAY_REDIRECT_URI = 'https://evend.pythonanywhere.com/ebay_callback'
+EBAY_REDIRECT_URI = 'https://tondomaine.render.app/ebay_callback'  # À changer pour Render
 EBAY_OAUTH_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
 EBAY_TRADING_API_URL = "https://api.ebay.com/ws/api.dll"
 EBAY_COMPAT_LEVEL = "1191"
-EBAY_SITE_ID_PRIMARY = "2"   # Canada
+EBAY_SITE_ID_PRIMARY = "2"  # Canada
 
 # --- Limites ---
 MAX_PER_FILE = 500
