@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Importer vos annonces eBay vers e-Vend</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 30px;
+      background: #f9f9f9;
+    }
+    h2 { color: #333; }
+    .section {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .alert {
+      background: #ffe5e5;
+      border: 1px solid #ff4d4d;
+      color: #b30000;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-weight: bold;
+    }
+    .explanation {
+      background: #f0f7ff;
+      border: 1px solid #cce0ff;
+      color: #003366;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .explanation h3 { margin-top: 0; color: #0055aa; }
+    .explanation ul { margin: 10px 0 15px 20px; }
+    .help-box {
+      background: #fefbea;
+      border: 1px solid #e6d97c;
+      color: #665c00;
+      padding: 15px;
+      border-radius: 6px;
+      margin: 15px 0;
+      font-size: 14px;
+    }
+    .help-box strong { color: #b38b00; }
+    label { font-weight: bold; margin-right: 10px; }
+    input[type="text"], input[type="file"] {
+      padding: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      width: 250px;
+    }
+    input[type="file"] { width: auto; }
+    button {
+      margin-top: 15px;
+      padding: 10px 20px;
+      background-color: #0073e6;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover { background-color: #005bb5; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+
+<h2>Importer vos annonces eBay vers e-Vend</h2>
+
+<!-- Encadré rouge avertissements -->
+<div class="alert">
+  ⚠️ Limite par import CSV : 500 articles maximum.<br>
+  ⚠️ Limite par jour par utilisateur : 2000 articles maximum.<br>
+  ⚠️ Assurez-vous de gérer votre stock si vous vendez le même article sur plusieurs marketplaces.
+</div>
+
+<!-- Section explicative -->
+<div class="explanation">
+  <h3>Il existe deux types de comptes eBay :</h3>
+  <ul>
+    <li><strong>Sans policies :</strong> compte classique, vous n’utilisez pas de politiques de vente prédéfinies. Le CSV modèle standard suffit.</li>
+    <li><strong>Avec policies :</strong> compte avancé, vous avez configuré des politiques d’expédition, de paiement et de retour dans eBay. Pour ce type de compte, utilisez le CSV modèle avec policies et renseignez vos IDs pour que l’import fonctionne correctement.</li>
+  </ul>
+  <p>
+    Les <em>policies</em> permettent de définir automatiquement comment vos ventes sont gérées pour
+    <strong>l’expédition</strong>, <strong>le paiement</strong> et <strong>les retours</strong>,
+    sans avoir à saisir ces informations pour chaque article.
+  </p>
+</div>
+
+<!-- Étape 1 : Modèles CSV -->
+<div class="section">
+  <h3><strong>Étape 1 : Téléchargez notre modèle de CSV que eBay va remplir</strong></h3>
+  <p>- Choisissez le modèle selon vos besoins :</p>
+
+  <label>
+    <input type="radio" name="use_policies" value="no" onclick="togglePolicyFields()">
+    Sans policies
+  </label>
+
+  <label>
+    <input type="radio" name="use_policies" value="yes" onclick="togglePolicyFields()">
+    Avec policies
+  </label>
+
+  <!-- Section sans policies -->
+  <div id="simple-fields" class="hidden" style="margin-top:15px;">
+    <h4>Modèle CSV sans policies</h4>
+    <button onclick="downloadSimpleCSV()">📥 Télécharger modèle sans policies</button>
+  </div>
+
+  <!-- Section avec policies -->
+  <div id="policy-fields" class="hidden" style="margin-top:15px;">
+    <h4>Modèle CSV avec Business Policies</h4>
+    <div>
+      <label for="shipping_policy_id">Shipping Policy ID :</label>
+      <input type="text" id="shipping_policy_id" placeholder="Ex: 123456">
+    </div>
+    <div>
+      <label for="payment_policy_id">Payment Policy ID :</label>
+      <input type="text" id="payment_policy_id" placeholder="Ex: 654321">
+    </div>
+    <div>
+      <label for="return_policy_id">Return Policy ID :</label>
+      <input type="text" id="return_policy_id" placeholder="Ex: 789012">
+    </div>
+
+    <!-- Encadré aide -->
+    <div class="help-box">
+      <strong>ℹ️ Aide pour trouver vos IDs sur eBay :</strong>
+      <ol>
+        <li>Connectez-vous à votre compte eBay.</li>
+        <li>En haut à droite, ouvrez le menu "Bonjour [Votre Nom]" et cliquez sur <em>Paramètres du compte</em>.</li>
+        <li>Dans la section <em>Mes ventes</em> à gauche, cliquez sur <em>Politiques de vente</em>.</li>
+        <li>Dans le tableau, vous verrez les IDs de vos policies pour l’expédition, le paiement et les retours.</li>
+        <li>Copiez ces IDs dans les champs ci-dessus pour que l’import fonctionne correctement.</li>
+      </ol>
+    </div>
+
+    <button onclick="downloadPolicyCSV()">📥 Télécharger modèle avec policies</button>
+  </div>
+</div>
+
+<!-- Étape 2 : Instructions eBay -->
+<div class="section" style="background:#e0f0ff;">
+  <h3><strong>Étape 2 : Allez sur eBay pour obtenir notre CSV incluant nos annonces</strong></h3>
+  <p><strong>Comment utiliser notre CSV modèle sur eBay :</strong></p>
+  <ol>
+    <li>Connectez-vous à votre compte eBay.</li>
+    <li>Cliquez sur le menu en haut à droite <em>"Mon eBay"</em>.</li>
+    <li>Dans ce menu, choisissez <em>Mes ventes</em>.</li>
+    <li>Dans le menu <em>Annonce (My Listing)</em>, choisissez <em>En cours (Active Listing)</em>.</li>
+    <li>Sélectionnez les items que vous voulez inclure dans votre CSV.</li>
+    <li>Cliquez sur le bouton <em>"Charger (Upload)"</em>. Une fenêtre s’ouvre.</li>
+    <li>Cliquez sur <em>"Choisir le fichier"</em> et parcourez votre ordinateur pour sélectionner le modèle CSV fourni par e-Vend.</li>
+    <li>Procédez et enregistrez ce nouveau CSV sur votre ordinateur.</li>
+  </ol>
+</div>
+
+<!-- Étape 3 : Transfert vers e-Vend -->
+<div class="section">
+  <h3><strong>Étape 3 : Transférez votre CSV contenant vos annonces vers e-Vend</strong></h3>
+  <form action="/upload_csv" method="POST" enctype="multipart/form-data">
+    <label for="csv_file">Sélectionnez votre fichier CSV :</label><br>
+    <input type="file" id="csv_file" name="csv_file" accept=".csv" required><br>
+    <button type="submit">➡️ Transférer vers e-Vend</button>
+  </form>
+</div>
+
+<!-- Notes -->
+<div class="section">
+  <h3><strong>Notes :</strong></h3>
+  <p>
+    Vous verrez des messages pendant le traitement :<br>
+    “Lot 1/N terminé, Lot 2/N en cours…”<br>
+    Import automatique terminé ou erreurs détectées.
+  </p>
+  <p>
+    - Allez sur votre compte e-Vend → Mes annonces.<br>
+    - Vérifiez titre, prix, description, images, stock.<br>
+    - Si corrections nécessaires, modifiez le CSV et refaites l’import.
+  </p>
+  <p>
+    <strong>Conseil :</strong> conservez une copie de votre CSV rempli pour pouvoir réimporter rapidement si besoin. Les images doivent être accessibles via URL.
+  </p>
+</div>
+
+<!-- Script JS -->
+<script>
+  function togglePolicyFields() {
+    const usePolicies = document.querySelector('input[name="use_policies"]:checked').value;
+    document.getElementById('policy-fields').classList.toggle('hidden', usePolicies !== 'yes');
+    document.getElementById('simple-fields').classList.toggle('hidden', usePolicies === 'yes');
+  }
+
+  function downloadSimpleCSV() {
+    window.location.href = `{{ url_for('download_csv_modele', mode='simple') }}`;
+  }
+
+  function downloadPolicyCSV() {
+    const shipping = document.getElementById('shipping_policy_id').value;
+    const payment = document.getElementById('payment_policy_id').value;
+    const ret = document.getElementById('return_policy_id').value;
+    const url = `{{ url_for('download_csv_modele', mode='policies') }}?shipping=${encodeURIComponent(shipping)}&payment=${encodeURIComponent(payment)}&return=${encodeURIComponent(ret)}`;
+    window.location.href = url;
+  }
+</script>
+
+</body>
+</html>
+
