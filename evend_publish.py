@@ -9,6 +9,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 import time
 import logging
+import requests
+import tempfile
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -53,7 +55,6 @@ chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-gpu")
 
-# Ne plus utiliser Service("/usr/bin/chromedriver"), Selenium Manager va trouver le driver
 driver = webdriver.Chrome(options=chrome_options)
 wait = WebDriverWait(driver, 20)
 
@@ -95,11 +96,20 @@ def upload_images(driver, image_urls):
                 logging.warning(f"⚠️ Pas assez de champs photo pour l'image {url}")
                 break
             field = photo_fields[i]
-            field.send_keys(url)
+
+            # Télécharger l’image dans un fichier temporaire
             try:
-                wait.until(lambda d: field.get_attribute('value') != "")
-            except TimeoutException:
-                logging.warning(f"⚠️ Image non chargée correctement: {url}")
+                response = requests.get(url, timeout=10)
+                if response.status_code == 200:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
+                        tmp_file.write(response.content)
+                        tmp_path = tmp_file.name
+                    field.send_keys(tmp_path)
+                    logging.info(f"📸 Image uploadée: {url}")
+                else:
+                    logging.warning(f"⚠️ Impossible de télécharger {url}, code {response.status_code}")
+            except Exception as e:
+                logging.warning(f"⚠️ Erreur téléchargement image {url}: {e}")
     except Exception as e:
         logging.warning(f"⚠️ Impossible d’uploader les images: {e}")
 
@@ -189,4 +199,5 @@ for index, row in df.iterrows():
 
 driver.quit()
 logging.info("🎯 Toutes les publications terminées.")
+
 
