@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
 import urllib.parse
 import logging
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 
 app = Flask(__name__)
 app.secret_key = 'UN_SECRET_POUR_SESSION'  # ⚠️ change-le en prod
@@ -349,8 +351,11 @@ def download_ebay_csv():
     return send_file(csv_path, as_attachment=True, download_name="csv_ebay_pret.csv", mimetype="text/csv")
 
 # --- Import e-Vend ---
-@app.route('/post_evend', methods=['POST'])
+@app.route('/post_evend', methods=['GET', 'POST'])
 def post_evend():
+    if request.method == 'GET':
+        return redirect(url_for('index'))
+
     user_id = session.get('user_id')
     if not user_id:
         flash("⚠️ Session expirée.")
@@ -427,6 +432,17 @@ def post_evend():
 
     # --- Lancer Selenium ---
     try:
+        # Selenium Manager pour Render (headless)
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+
+        driver = webdriver.Chrome(options=chrome_options)  # Selenium Manager télécharge le driver automatiquement
+        driver.quit()
+
+        # Ensuite lancer ton script classique
         result = subprocess.run(
             ['python3', SELENIUM_SCRIPT, file_path],
             check=True,
@@ -448,14 +464,12 @@ def post_evend():
 
     return redirect(url_for('index'))
 
-
-
-
-
-
 # --- Réinitialiser dernier CSV ---
-@app.route('/reset_csv', methods=['POST'])
+@app.route('/reset_csv', methods=['GET', 'POST'])
 def reset_csv():
+    if request.method == 'GET':
+        return redirect(url_for('index'))
+
     user_id = session.get('user_id')
     if not user_id:
         flash("⚠️ Session expirée.")
