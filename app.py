@@ -348,7 +348,7 @@ def download_ebay_csv():
     flash(f"✅ CSV eBay prêt avec {len(df)} annonces.")
     return send_file(csv_path, as_attachment=True, download_name="csv_ebay_pret.csv", mimetype="text/csv")
 
-# --- Import e-Vend (fusionné avec récupération email/password) ---
+# --- Import e-Vend ---
 @app.route('/post_evend', methods=['POST'])
 def post_evend():
     user_id = session.get('user_id')
@@ -390,7 +390,6 @@ def post_evend():
     # --- Lecture CSV ---
     try:
         df = pd.read_csv(file_path)
-        df = df.fillna("")  # <-- remplissage des colonnes vides
     except Exception as e:
         os.remove(file_path)
         flash(f"❌ CSV invalide: {e}")
@@ -406,9 +405,25 @@ def post_evend():
 
     # --- Préparer les variables d'environnement pour Selenium ---
     env_vars = os.environ.copy()
-    env_vars.update(form_data)
-    env_vars["livraison_type"] = "Expédition" if request.form.get("livraison_expedition_check") else "Ramassage"
-    env_vars["livraison_ramassage"] = request.form.get("livraison_ramassage") if request.form.get("livraison_ramassage_check") else ""
+    env_vars["email"] = form_data.get("email", "")
+    env_vars["password"] = form_data.get("password", "")
+    env_vars["type_annonce"] = form_data.get("type_annonce", "Vente classique")
+    env_vars["categorie"] = form_data.get("categorie", "Autre")
+    env_vars["titre"] = form_data.get("titre", "Titre manquant")
+    env_vars["description"] = form_data.get("description", "Description non disponible")
+    env_vars["condition"] = form_data.get("condition", "Non spécifié")
+    env_vars["retour"] = form_data.get("retour", "Non")
+    env_vars["garantie"] = form_data.get("garantie", "Non")
+    env_vars["prix"] = form_data.get("prix", "0")
+    env_vars["stock"] = form_data.get("stock", "1")
+    env_vars["frais_port_article"] = form_data.get("frais_port_article", "0")
+    env_vars["frais_port_sup"] = form_data.get("frais_port_sup", "0")
+    env_vars["photo_defaut"] = form_data.get("photo_defaut", "")
+
+    # --- Livraison ---
+    env_vars["livraison_ramassage_check"] = "on" if request.form.get("livraison_ramassage_check") else ""
+    env_vars["livraison_expedition_check"] = "on" if request.form.get("livraison_expedition_check") else ""
+    env_vars["livraison_ramassage"] = request.form.get("livraison_ramassage", "")
 
     # --- Lancer Selenium ---
     try:
@@ -432,6 +447,7 @@ def post_evend():
             os.remove(file_path)
 
     return redirect(url_for('index'))
+
 
 
 
