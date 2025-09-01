@@ -1,61 +1,71 @@
+import os
 import sys
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException
 import time
 import logging
-import os
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-if len(sys.argv) < 4:
-    logging.error("Usage: python evend_publish.py <csv_file> <evend_email> <evend_password>")
+# --- Vérification argument CSV ---
+if len(sys.argv) < 2:
+    logging.error("Usage: python evend_publish.py <csv_file>")
     sys.exit(1)
 
 csv_file = sys.argv[1]
-EVEND_EMAIL = sys.argv[2]
-EVEND_PASSWORD = sys.argv[3]
 
 if not os.path.exists(csv_file):
     logging.error(f"Fichier CSV introuvable: {csv_file}")
     sys.exit(1)
 
+# --- Récupération des variables d'environnement depuis Flask ---
+EVEND_EMAIL = os.environ.get("email")
+EVEND_PASSWORD = os.environ.get("password")
+LIVRAISON_RAMASSAGE_CHECK = os.environ.get("livraison_ramassage_check") == 'on'
+LIVRAISON_EXPEDITION_CHECK = os.environ.get("livraison_expedition_check") == 'on'
+LIVRAISON_RAMASSAGE = os.environ.get("livraison_ramassage", "")
+FRAIS_PORT_ARTICLE = os.environ.get("frais_port_article", "0")
+FRAIS_PORT_SUP = os.environ.get("frais_port_suppl", "0")
+
+if not EVEND_EMAIL or not EVEND_PASSWORD:
+    logging.error("❌ Email ou mot de passe e-Vend manquant dans les variables d'environnement.")
+    sys.exit(1)
+
+# --- Lecture CSV ---
 df = pd.read_csv(csv_file)
 if df.empty:
     logging.error("Le CSV est vide.")
     sys.exit(1)
 
 # --- Selenium Chrome Headless pour Render ---
-from selenium.webdriver.chrome.service import Service
-
 chrome_options = Options()
 chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
-chrome_options.add_argument("--disable-gpu")  # sécurise sur Render
+chrome_options.add_argument("--disable-gpu")
 
-# chemin par défaut sur Render
 chrome_service = Service("/usr/bin/chromedriver")
 driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
-
 wait = WebDriverWait(driver, 10)
 
 # --- URL e-Vend ---
 EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
 EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
 
-# --- Login automatique e-Vend ---
+# --- Login e-Vend ---
 try:
     driver.get(EVEND_LOGIN_URL)
     wait.until(EC.presence_of_element_located((By.ID, "email")))
     driver.find_element(By.ID, "email").send_keys(EVEND_EMAIL)
     driver.find_element(By.ID, "password").send_keys(EVEND_PASSWORD)
     driver.find_element(By.ID, "loginBtn").click()
-    wait.until(EC.presence_of_element_located((By.ID, "dashboard")))  # ajuster au sélecteur réel
+    wait.until(EC.presence_of_element_located((By.ID, "dashboard")))
     logging.info("✅ Connecté à e-Vend avec succès.")
 except Exception as e:
     logging.error(f"❌ Échec du login e-Vend: {e}")
@@ -77,12 +87,13 @@ for index, row in df.iterrows():
         garantie = row.get('garantie', 'Non')
         prix = row.get('prix', 0.0)
         stock = row.get('stock', 1)
-        livraison = row.get('livraison_type', 'Standard')
-        livraison_ramassage = row.get('livraison_ramassage', '')
-        frais_port_article = row.get('frais_port_article', 0)
-        frais_port_sup = row.get('frais_port_sup', 0)
+        livraison = "Ramassage" if LIVRAISON_RAMASSAGE_CHECK else "Expédition"
+        livraison_ramassage = LIVRAISON_RAMASSAGE if LIVRAISON_RAMASSAGE_CHECK else ""
+        frais_port_article = FRAIS_PORT_ARTICLE
+        frais_port_sup = FRAIS_PORT_SUP
         image_url = row.get('photo_defaut', '')
 
+        # --- Accès au formulaire e-Vend ---
         driver.get(EVEND_NEW_LISTING_URL)
         wait.until(EC.presence_of_element_located((By.ID, "type_annonce")))
 
@@ -121,3 +132,4 @@ for index, row in df.iterrows():
 
 driver.quit()
 logging.info("🎯 Toutes les publications terminées.")
+
