@@ -11,7 +11,6 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 import time
 import logging
 
-# --- Logging ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # --- Vérification argument CSV ---
@@ -34,7 +33,7 @@ FRAIS_PORT_ARTICLE = os.environ.get("frais_port_article", "0")
 FRAIS_PORT_SUP = os.environ.get("frais_port_sup", "0")
 
 if not EVEND_EMAIL or not EVEND_PASSWORD:
-    logging.error("❌ Email ou mot de passe e-Vend manquant dans les variables d'environnement.")
+    logging.error("❌ Email ou mot de passe e-Vend manquant.")
     sys.exit(1)
 
 # --- Lecture CSV ---
@@ -48,7 +47,7 @@ if df.empty:
     logging.error("Le CSV est vide.")
     sys.exit(1)
 
-# --- Selenium Chrome Headless pour Render ---
+# --- Selenium Chrome Headless ---
 chrome_options = Options()
 chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
@@ -56,7 +55,7 @@ chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-gpu")
 chrome_service = Service("/usr/bin/chromedriver")
 driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
-wait = WebDriverWait(driver, 15)
+wait = WebDriverWait(driver, 20)
 
 # --- URLs e-Vend ---
 EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
@@ -72,14 +71,53 @@ try:
     wait.until(EC.presence_of_element_located((By.ID, "dashboard")))
     logging.info("✅ Connecté à e-Vend avec succès.")
 except Exception as e:
-    logging.error(f"❌ Échec du login e-Vend: {e}")
+    logging.error(f"❌ Échec du login: {e}")
     driver.quit()
     sys.exit(1)
+
+# --- Fonctions utilitaires ---
+def check_radio(driver, name, value_to_check):
+    """Coche un bouton radio par sa valeur."""
+    try:
+        radios = driver.find_elements(By.NAME, name)
+        for r in radios:
+            if r.get_attribute("value") == value_to_check and not r.is_selected():
+                r.click()
+                return True
+    except Exception as e:
+        logging.warning(f"⚠️ Impossible de cocher '{value_to_check}' pour {name}: {e}")
+    return False
+
+def upload_images(driver, image_urls):
+    """Upload plusieurs images en attendant que chaque image soit chargée."""
+    try:
+        photo_fields = driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
+        for i, url in enumerate(image_urls):
+            if i >= len(photo_fields):
+                logging.warning(f"⚠️ Pas assez de champs photo pour l'image {url}")
+                break
+            field = photo_fields[i]
+            field.send_keys(url)
+            # Attendre que la miniature/image soit visible
+            try:
+                wait.until(lambda d: field.get_attribute('value') != "")
+            except TimeoutException:
+                logging.warning(f"⚠️ Image non chargée correctement: {url}")
+    except Exception as e:
+        logging.warning(f"⚠️ Impossible d’uploader les images: {e}")
+
+def wait_for_success_message():
+    """Vérifie que l'article a bien été publié."""
+    try:
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".success-message, .alert-success")))
+        return True
+    except TimeoutException:
+        return False
 
 # --- Publication des articles ---
 for index, row in df.iterrows():
     try:
-        logging.info(f"📌 Publication de l'article {index+1}/{len(df)}")
+        logging.info(f"📌 Publication article {index+1}/{len(df)}")
 
         # --- Valeurs par défaut ---
         annonce_type = str(row.get('type_annonce', 'Vente classique') or 'Vente classique')
@@ -91,17 +129,26 @@ for index, row in df.iterrows():
         garantie = str(row.get('garantie', 'Non') or 'Non')
         prix = float(row.get('prix', 0.0) or 0.0)
         stock = int(row.get('stock', 1) or 1)
-        livraison = "Ramassage" if LIVRAISON_RAMASSAGE_CHECK else "Expédition"
-        livraison_ramassage = LIVRAISON_RAMASSAGE if LIVRAISON_RAMASSAGE_CHECK else ""
         frais_port_article = float(FRAIS_PORT_ARTICLE or 0.0)
         frais_port_sup = float(FRAIS_PORT_SUP or 0.0)
-        image_url = str(row.get('photo_defaut', '') or '')
 
-        # --- Accès au formulaire e-Vend ---
+        # --- Images ---
+        image_urls = []
+        if 'photo_defaut' in row and pd.notna(row['photo_defaut']):
+            image_urls = [img.strip() for img in str(row['photo_defaut']).replace(';', ',').split(',') if img.strip()]
+
+        # --- Livraison ---
+        livraison_type = "Expédition"
+        livraison_ramassage_value = ""
+        if LIVRAISON_RAMASSAGE_CHECK:
+            livraison_type = "Ramassage"
+            livraison_ramassage_value = LIVRAISON_RAMASSAGE
+
+        # --- Accès formulaire ---
         driver.get(EVEND_NEW_LISTING_URL)
         wait.until(EC.presence_of_element_located((By.ID, "type_annonce")))
 
-        # --- Remplissage formulaire avec vérification des champs ---
+        # --- Remplissage formulaire ---
         fields = {
             "type_annonce": annonce_type,
             "categorie": categorie,
@@ -112,39 +159,45 @@ for index, row in df.iterrows():
             "garantie": garantie,
             "prix": str(prix),
             "stock": str(stock),
-            "livraison_type": livraison,
-            "livraison_ramassage": livraison_ramassage,
             "frais_port_article": str(frais_port_article),
             "frais_port_sup": str(frais_port_sup)
         }
-
         for field_id, value in fields.items():
             try:
-                element = driver.find_element(By.ID, field_id)
-                element.clear() if field_id in ["prix", "stock", "frais_port_article", "frais_port_sup"] else None
-                element.send_keys(value)
+                el = driver.find_element(By.ID, field_id)
+                if field_id in ["prix", "stock", "frais_port_article", "frais_port_sup"]:
+                    el.clear()
+                el.send_keys(value)
             except NoSuchElementException:
-                logging.warning(f"⚠️ Champ '{field_id}' non trouvé, passage à l'article suivant.")
+                logging.warning(f"⚠️ Champ '{field_id}' non trouvé.")
 
-        # --- Photo ---
-        if image_url:
+        # --- Livraison ---
+        check_radio(driver, "livraison_type", livraison_type)
+        if livraison_ramassage_value:
             try:
-                driver.find_element(By.ID, "photo_defaut").send_keys(image_url)
+                ramassage_field = driver.find_element(By.ID, "livraison_ramassage")
+                ramassage_field.clear()
+                ramassage_field.send_keys(livraison_ramassage_value)
             except NoSuchElementException:
-                logging.warning("⚠️ Champ photo non trouvé, passage à l'article suivant.")
+                logging.warning("⚠️ Champ livraison ramassage non trouvé.")
+
+        # --- Upload images ---
+        if image_urls:
+            upload_images(driver, image_urls)
 
         # --- Soumission ---
         try:
             driver.find_element(By.ID, "submitBtn").click()
-            time.sleep(2)  # petit délai pour assurer l'envoi
-            logging.info(f"✅ Article publié: {titre}")
+            if wait_for_success_message():
+                logging.info(f"✅ Article publié: {titre}")
+            else:
+                logging.warning(f"⚠️ Pas de confirmation publication pour l'article: {titre}")
         except Exception as e:
             logging.error(f"❌ Impossible de soumettre l'article {titre}: {e}")
 
     except Exception as e:
-        logging.error(f"❌ Erreur publication article {index+1}: {e}")
+        logging.error(f"❌ Erreur article {index+1}: {e}")
         continue
 
-# --- Nettoyage final ---
 driver.quit()
 logging.info("🎯 Toutes les publications terminées.")
