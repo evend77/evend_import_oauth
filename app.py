@@ -383,7 +383,8 @@ def post_evend():
         "prix": request.form.get("prix"),
         "stock": request.form.get("stock"),
         "livraison_ramassage": request.form.get("livraison_ramassage"),
-        "expedition": request.form.get("livraison_type"),
+        "livraison_ramassage_check": request.form.get("livraison_ramassage_check"),
+        "livraison_expedition_check": request.form.get("livraison_expedition_check"),
         "frais_port_article": request.form.get("frais_port_article"),
         "frais_port_suppl": request.form.get("frais_port_sup"),
         "photo_defaut": request.form.get("photo_defaut")
@@ -425,6 +426,7 @@ def post_evend():
             os.remove(file_path)
 
     return redirect(url_for('index'))
+
 
 
 # --- Réinitialiser dernier CSV ---
