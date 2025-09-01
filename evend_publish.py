@@ -4,7 +4,6 @@ import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
@@ -47,14 +46,15 @@ if df.empty:
     logging.error("Le CSV est vide.")
     sys.exit(1)
 
-# --- Selenium Chrome Headless ---
+# --- Selenium Chrome Headless via Selenium Manager ---
 chrome_options = Options()
 chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-gpu")
-chrome_service = Service("/usr/bin/chromedriver")
-driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
+
+# Ne plus utiliser Service("/usr/bin/chromedriver"), Selenium Manager va trouver le driver
+driver = webdriver.Chrome(options=chrome_options)
 wait = WebDriverWait(driver, 20)
 
 # --- URLs e-Vend ---
@@ -77,7 +77,6 @@ except Exception as e:
 
 # --- Fonctions utilitaires ---
 def check_radio(driver, name, value_to_check):
-    """Coche un bouton radio par sa valeur."""
     try:
         radios = driver.find_elements(By.NAME, name)
         for r in radios:
@@ -89,7 +88,6 @@ def check_radio(driver, name, value_to_check):
     return False
 
 def upload_images(driver, image_urls):
-    """Upload plusieurs images en attendant que chaque image soit chargée."""
     try:
         photo_fields = driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
         for i, url in enumerate(image_urls):
@@ -98,7 +96,6 @@ def upload_images(driver, image_urls):
                 break
             field = photo_fields[i]
             field.send_keys(url)
-            # Attendre que la miniature/image soit visible
             try:
                 wait.until(lambda d: field.get_attribute('value') != "")
             except TimeoutException:
@@ -107,7 +104,6 @@ def upload_images(driver, image_urls):
         logging.warning(f"⚠️ Impossible d’uploader les images: {e}")
 
 def wait_for_success_message():
-    """Vérifie que l'article a bien été publié."""
     try:
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".success-message, .alert-success")))
         return True
@@ -119,7 +115,6 @@ for index, row in df.iterrows():
     try:
         logging.info(f"📌 Publication article {index+1}/{len(df)}")
 
-        # --- Valeurs par défaut ---
         annonce_type = str(row.get('type_annonce', 'Vente classique') or 'Vente classique')
         categorie = str(row.get('categorie', 'Autre') or 'Autre')
         titre = str(row.get('titre', 'Titre manquant') or 'Titre manquant')
@@ -132,23 +127,19 @@ for index, row in df.iterrows():
         frais_port_article = float(FRAIS_PORT_ARTICLE or 0.0)
         frais_port_sup = float(FRAIS_PORT_SUP or 0.0)
 
-        # --- Images ---
         image_urls = []
         if 'photo_defaut' in row and pd.notna(row['photo_defaut']):
             image_urls = [img.strip() for img in str(row['photo_defaut']).replace(';', ',').split(',') if img.strip()]
 
-        # --- Livraison ---
         livraison_type = "Expédition"
         livraison_ramassage_value = ""
         if LIVRAISON_RAMASSAGE_CHECK:
             livraison_type = "Ramassage"
             livraison_ramassage_value = LIVRAISON_RAMASSAGE
 
-        # --- Accès formulaire ---
         driver.get(EVEND_NEW_LISTING_URL)
         wait.until(EC.presence_of_element_located((By.ID, "type_annonce")))
 
-        # --- Remplissage formulaire ---
         fields = {
             "type_annonce": annonce_type,
             "categorie": categorie,
@@ -171,7 +162,6 @@ for index, row in df.iterrows():
             except NoSuchElementException:
                 logging.warning(f"⚠️ Champ '{field_id}' non trouvé.")
 
-        # --- Livraison ---
         check_radio(driver, "livraison_type", livraison_type)
         if livraison_ramassage_value:
             try:
@@ -181,11 +171,9 @@ for index, row in df.iterrows():
             except NoSuchElementException:
                 logging.warning("⚠️ Champ livraison ramassage non trouvé.")
 
-        # --- Upload images ---
         if image_urls:
             upload_images(driver, image_urls)
 
-        # --- Soumission ---
         try:
             driver.find_element(By.ID, "submitBtn").click()
             if wait_for_success_message():
@@ -201,3 +189,4 @@ for index, row in df.iterrows():
 
 driver.quit()
 logging.info("🎯 Toutes les publications terminées.")
+
