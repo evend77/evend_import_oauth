@@ -2,6 +2,6 @@ services:
   - type: web
     name: evend-import
     env: python
-    pythonVersion: "3.11"
+    pythonVersion: "3.13"
     buildCommand: "pip install -r requirements.txt"
     startCommand: "gunicorn app:app"
