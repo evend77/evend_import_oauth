@@ -42,8 +42,9 @@ driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
 wait = WebDriverWait(driver, 10)
 
 # --- URL e-Vend ---
-EVEND_LOGIN_URL = "https://evend.com/login"  # mettre l’URL réelle
-EVEND_NEW_LISTING_URL = "https://evend.com/new_listing"  # page création annonce
+EVEND_LOGIN_URL = "https://www.e-vend.ca/login"  # page de connexion réelle
+EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"  # page création annonce
+
 
 # --- Login automatique e-Vend ---
 EVEND_EMAIL = "TON_EMAIL"
