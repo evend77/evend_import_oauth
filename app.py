@@ -371,8 +371,8 @@ def post_evend():
 
     # --- Récupération des champs du formulaire ---
     form_data = {
-        "email": request.form.get("email"),
-        "password": request.form.get("password"),
+        "email": request.form.get("evend_email"),
+        "password": request.form.get("evend_password"),
         "type_annonce": request.form.get("type_annonce"),
         "categorie": request.form.get("categorie"),
         "titre": request.form.get("titre"),
@@ -382,10 +382,10 @@ def post_evend():
         "garantie": request.form.get("garantie"),
         "prix": request.form.get("prix"),
         "stock": request.form.get("stock"),
-        "livraison_type": request.form.get("livraison_type"),
         "livraison_ramassage": request.form.get("livraison_ramassage"),
+        "expedition": request.form.get("livraison_type"),
         "frais_port_article": request.form.get("frais_port_article"),
-        "frais_port_sup": request.form.get("frais_port_sup"),
+        "frais_port_suppl": request.form.get("frais_port_sup"),
         "photo_defaut": request.form.get("photo_defaut")
     }
 
@@ -425,6 +425,7 @@ def post_evend():
             os.remove(file_path)
 
     return redirect(url_for('index'))
+
 
 # --- Réinitialiser dernier CSV ---
 @app.route('/reset_csv', methods=['POST'])
