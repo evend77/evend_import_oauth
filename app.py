@@ -371,25 +371,23 @@ def post_evend():
 
     # --- Récupération des champs du formulaire ---
     form_data = {
-        "email": request.form.get("evend_email"),
-        "password": request.form.get("evend_password"),
-        "type_annonce": request.form.get("type_annonce"),
-        "categorie": request.form.get("categorie"),
-        "titre": request.form.get("titre"),
-        "description": request.form.get("description"),
-        "condition": request.form.get("condition"),
-        "retour": request.form.get("retour"),
-        "garantie": request.form.get("garantie"),
-        "prix": request.form.get("prix"),
-        "stock": request.form.get("stock"),
-        "livraison_ramassage": request.form.get("livraison_ramassage"),
-        "livraison_ramassage_check": request.form.get("livraison_ramassage_check"),
-        "livraison_expedition_check": request.form.get("livraison_expedition_check"),
-        "frais_port_article": request.form.get("frais_port_article"),
-        "frais_port_suppl": request.form.get("frais_port_sup"),
-        "photo_defaut": request.form.get("photo_defaut")
+        "email": request.form.get("evend_email", ""),
+        "password": request.form.get("evend_password", ""),
+        "type_annonce": request.form.get("type_annonce", "Vente classique"),
+        "categorie": request.form.get("categorie", "Autre"),
+        "titre": request.form.get("titre", "Titre manquant"),
+        "description": request.form.get("description", "Description non disponible"),
+        "condition": request.form.get("condition", "Non spécifié"),
+        "retour": request.form.get("retour", "Non"),
+        "garantie": request.form.get("garantie", "Non"),
+        "prix": request.form.get("prix", "0"),
+        "stock": request.form.get("stock", "1"),
+        "frais_port_article": request.form.get("frais_port_article", "0"),
+        "frais_port_sup": request.form.get("frais_port_sup", "0"),
+        "photo_defaut": request.form.get("photo_defaut", "")
     }
 
+    # --- Lecture CSV ---
     try:
         df = pd.read_csv(file_path)
     except Exception as e:
@@ -405,33 +403,20 @@ def post_evend():
         flash(f"⚠️ Quota restant: {remaining_quota}, ton fichier contient {nb_items}.")
         return redirect(url_for('index'))
 
+    # --- Préparer les variables d'environnement pour Selenium ---
+    env_vars = os.environ.copy()
+    env_vars.update(form_data)
+    env_vars["livraison_type"] = "Expédition" if request.form.get("livraison_expedition_check") else "Ramassage"
+    env_vars["livraison_ramassage"] = request.form.get("livraison_ramassage") if request.form.get("livraison_ramassage_check") else ""
+
+    # --- Lancer Selenium ---
     try:
-       # Préparer les variables d'environnement pour Selenium
-env_vars = os.environ.copy()
-env_vars.update(form_data)
-env_vars["livraison_type"] = "Expédition" if request.form.get("livraison_expedition_check") else "Ramassage"
-env_vars["livraison_ramassage"] = request.form.get("livraison_ramassage") if request.form.get("livraison_ramassage_check") else ""
-
-try:
-    result = subprocess.run(
-        ['python3', SELENIUM_SCRIPT, file_path],
-        check=True,
-        capture_output=True,
-        text=True,
-        env=env_vars  # On passe toutes les valeurs du formulaire
-    )
-    add_import(user_id, nb_items)
-    flash("✅ Import e-Vend terminé !")
-    if result.stdout:
-        flash(f"ℹ️ Logs:\n{result.stdout}")
-    if result.stderr:
-        flash(f"⚠️ Erreurs:\n{result.stderr}")
-except subprocess.CalledProcessError as e:
-    flash(f"❌ Erreur import: {e}\nStdout:\n{e.stdout}\nStderr:\n{e.stderr}")
-finally:
-    if os.path.exists(file_path):
-        os.remove(file_path)
-
+        result = subprocess.run(
+            ['python3', SELENIUM_SCRIPT, file_path],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env_vars
         )
         add_import(user_id, nb_items)
         flash("✅ Import e-Vend terminé !")
@@ -446,6 +431,7 @@ finally:
             os.remove(file_path)
 
     return redirect(url_for('index'))
+
 
 
 
