@@ -2,10 +2,6 @@ services:
   - type: web
     name: evend-import
     env: python
-    plan: free
-    pythonVersion: "3.11"
-    repo: https://github.com/evend77/evend_import_oauth
-    branch: main
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
-    autoDeploy: true
+    pythonVersion: "3.11"        # obligatoire pour compatibilité numpy/pandas
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app"
