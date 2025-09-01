@@ -390,6 +390,7 @@ def post_evend():
     # --- Lecture CSV ---
     try:
         df = pd.read_csv(file_path)
+        df = df.fillna("")  # <-- remplissage des colonnes vides
     except Exception as e:
         os.remove(file_path)
         flash(f"❌ CSV invalide: {e}")
@@ -431,6 +432,7 @@ def post_evend():
             os.remove(file_path)
 
     return redirect(url_for('index'))
+
 
 
 
