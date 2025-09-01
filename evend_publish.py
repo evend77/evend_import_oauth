@@ -12,11 +12,14 @@ import os
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-if len(sys.argv) < 2:
-    logging.error("Usage: python evend_publish.py <csv_file>")
+if len(sys.argv) < 4:
+    logging.error("Usage: python evend_publish.py <csv_file> <evend_email> <evend_password>")
     sys.exit(1)
 
 csv_file = sys.argv[1]
+EVEND_EMAIL = sys.argv[2]
+EVEND_PASSWORD = sys.argv[3]
+
 if not os.path.exists(csv_file):
     logging.error(f"Fichier CSV introuvable: {csv_file}")
     sys.exit(1)
@@ -42,14 +45,10 @@ driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
 wait = WebDriverWait(driver, 10)
 
 # --- URL e-Vend ---
-EVEND_LOGIN_URL = "https://www.e-vend.ca/login"  # page de connexion réelle
-EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"  # page création annonce
-
+EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
+EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
 
 # --- Login automatique e-Vend ---
-EVEND_EMAIL = "TON_EMAIL"
-EVEND_PASSWORD = "TON_MDP"
-
 try:
     driver.get(EVEND_LOGIN_URL)
     wait.until(EC.presence_of_element_located((By.ID, "email")))
@@ -122,4 +121,3 @@ for index, row in df.iterrows():
 
 driver.quit()
 logging.info("🎯 Toutes les publications terminées.")
-
