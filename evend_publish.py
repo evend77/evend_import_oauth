@@ -4,6 +4,7 @@ import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
@@ -48,14 +49,16 @@ if df.empty:
     logging.error("Le CSV est vide.")
     sys.exit(1)
 
-# --- Selenium Chrome Headless via Selenium Manager ---
+# --- Selenium Chrome Headless configuré pour Render ---
 chrome_options = Options()
-chrome_options.add_argument("--headless")
+chrome_options.binary_location = "/usr/bin/google-chrome"
+chrome_options.add_argument("--headless=new")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-gpu")
 
-driver = webdriver.Chrome(options=chrome_options)
+service = Service("/usr/bin/chromedriver")
+driver = webdriver.Chrome(service=service, options=chrome_options)
 wait = WebDriverWait(driver, 20)
 
 # --- URLs e-Vend ---
@@ -199,5 +202,6 @@ for index, row in df.iterrows():
 
 driver.quit()
 logging.info("🎯 Toutes les publications terminées.")
+s.")
 
 
