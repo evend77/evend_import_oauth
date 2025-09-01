@@ -4,3 +4,4 @@ python-dotenv==1.0.0
 gunicorn==21.2.0
 numpy       # laisse pip choisir la version compatible
 pandas      # laisse pip choisir la version compatible
+selenium    # laisse pip choisir la version compatible
