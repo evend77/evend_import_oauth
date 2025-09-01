@@ -192,7 +192,7 @@
 
                         <!-- Prix -->
                         <div class="mb-2">
-                            <label class="form-label">Prix - minimum 5</label>
+                            <label class="form-label">Prix ($) -minimun 5$</label>
                             <input type="number" class="form-control" name="prix" value="5" min="0">
                         </div>
 
@@ -204,26 +204,29 @@
 
                         <!-- Options de livraison -->
                         <div class="mb-2">
-                            <label class="form-label">Options de livraison</label>
-                            <select class="form-select mb-3" name="livraison_type">
-                                <option>Ramassage sur place</option>
-                                <option selected>Expédition par transporteur</option>
-                            </select>
+                            <h6 class="fw-bold">Options de livraison</h6>
 
-                            <div class="mb-2">
-                                <label for="livraison_ramassage" class="form-label">Adresse du ramassage</label>
-                                <input type="text" class="form-control" id="livraison_ramassage" name="livraison_ramassage" value="123 Rue Exemple, Montréal">
+                            <!-- Ramassage sur place -->
+                            <div class="form-check mb-1">
+                                <input class="form-check-input" type="checkbox" name="livraison_ramassage_check" id="livraison_ramassage_check">
+                                <label class="form-check-label" for="livraison_ramassage_check">
+                                    Ramassage sur place
+                                </label>
                             </div>
+                            <label class="form-label">Adresse du ramassage</label>
+                            <input type="text" class="form-control mb-2" name="livraison_ramassage" placeholder="Adresse du ramassage" value="123 Rue Exemple, Montréal">
 
-                            <div class="mb-2">
-                                <label for="frais_port_article" class="form-label">Frais de port pour un article</label>
-                                <input type="number" class="form-control" id="frais_port_article" name="frais_port_article" value="5">
+                            <!-- Expédition par transporteur -->
+                            <div class="form-check mb-1">
+                                <input class="form-check-input" type="checkbox" name="livraison_expedition_check" id="livraison_expedition_check" checked>
+                                <label class="form-check-label" for="livraison_expedition_check">
+                                    Expédition par transporteur
+                                </label>
                             </div>
-
-                            <div class="mb-2">
-                                <label for="frais_port_suppl" class="form-label">Frais de port pour les articles supplémentaires</label>
-                                <input type="number" class="form-control" id="frais_port_suppl" name="frais_port_suppl" value="2">
-                            </div>
+                            <label class="form-label">Frais de port pour un article</label>
+                            <input type="number" class="form-control mb-1" name="frais_port_article" value="5">
+                            <label class="form-label">Frais de port pour les articles supplémentaires</label>
+                            <input type="number" class="form-control mb-1" name="frais_port_sup" value="2">
                         </div>
 
                         <!-- Photo -->
