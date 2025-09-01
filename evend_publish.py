@@ -202,6 +202,5 @@ for index, row in df.iterrows():
 
 driver.quit()
 logging.info("🎯 Toutes les publications terminées.")
-s.")
 
 
