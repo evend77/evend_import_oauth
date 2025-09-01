@@ -14,68 +14,6 @@ UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 SELENIUM_SCRIPT = os.path.join(BASE_DIR, 'evend_publish.py')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# ------------------------
-# Route pour l'import sur e-Vend
-# ------------------------
-@app.route("/post_evend", methods=["POST"])
-def post_evend():
-    import sys
-    import os
-    import uuid
-    import subprocess
-    from flask import request, flash, redirect, url_for
-
-    # Vérifie si un fichier CSV a été envoyé
-    if 'csv_file' not in request.files:
-        flash("❌ Aucun fichier sélectionné.")
-        return redirect(url_for('index'))
-
-    file = request.files['csv_file']
-    if file.filename == '':
-        flash("❌ Aucun fichier sélectionné.")
-        return redirect(url_for('index'))
-
-    # Crée le dossier uploads si nécessaire
-    UPLOAD_FOLDER = "uploads"
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-    # Sauvegarde le CSV dans le dossier uploads
-    filename = f"{uuid.uuid4().hex}_{file.filename}"
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
-    file.save(filepath)
-
-    # Récupère les valeurs par défaut depuis le formulaire
-    default_values = {
-        "type_annonce": request.form.get("type_annonce"),
-        "categorie": request.form.get("categorie"),
-        "titre": request.form.get("titre"),
-        "description": request.form.get("description"),
-        "condition": request.form.get("condition"),
-        "retour": request.form.get("retour"),
-        "garantie": request.form.get("garantie"),
-        "prix": request.form.get("prix"),
-        "stock": request.form.get("stock"),
-        "livraison_type": request.form.get("livraison_type"),
-        "livraison_ramassage": request.form.get("livraison_ramassage"),
-        "frais_port_article": request.form.get("frais_port_article"),
-        "frais_port_sup": request.form.get("frais_port_sup"),
-        "photo_defaut": request.form.get("photo_defaut")
-    }
-
-    # Appelle ton script Python qui fait l'import sur e-Vend
-    try:
-        subprocess.run([
-            "python3",
-            "/opt/render/project/src/evend_publish.py",
-            filepath
-        ], check=True)
-        flash("✅ Import terminé avec succès !")
-    except subprocess.CalledProcessError as e:
-        flash(f"❌ Erreur import: {e}")
-
-    return redirect(url_for('index'))
-
-
 # --- eBay API PROD ---
 EBAY_CLIENT_ID = 'AlexBoss-eVendImp-PRD-bd29c22a7-4a223ad6'
 EBAY_CLIENT_SECRET = 'PRD-d29c22a7bc6d-e864-4ffc-8934-e19a'
@@ -410,7 +348,7 @@ def download_ebay_csv():
     flash(f"✅ CSV eBay prêt avec {len(df)} annonces.")
     return send_file(csv_path, as_attachment=True, download_name="csv_ebay_pret.csv", mimetype="text/csv")
 
-# --- Import e-Vend ---
+# --- Import e-Vend (fusionné avec récupération email/password) ---
 @app.route('/post_evend', methods=['POST'])
 def post_evend():
     user_id = session.get('user_id')
@@ -431,6 +369,26 @@ def post_evend():
     file_path = os.path.join(UPLOAD_FOLDER, safe_filename)
     file.save(file_path)
 
+    # --- Récupération des champs du formulaire ---
+    form_data = {
+        "email": request.form.get("email"),
+        "password": request.form.get("password"),
+        "type_annonce": request.form.get("type_annonce"),
+        "categorie": request.form.get("categorie"),
+        "titre": request.form.get("titre"),
+        "description": request.form.get("description"),
+        "condition": request.form.get("condition"),
+        "retour": request.form.get("retour"),
+        "garantie": request.form.get("garantie"),
+        "prix": request.form.get("prix"),
+        "stock": request.form.get("stock"),
+        "livraison_type": request.form.get("livraison_type"),
+        "livraison_ramassage": request.form.get("livraison_ramassage"),
+        "frais_port_article": request.form.get("frais_port_article"),
+        "frais_port_sup": request.form.get("frais_port_sup"),
+        "photo_defaut": request.form.get("photo_defaut")
+    }
+
     try:
         df = pd.read_csv(file_path)
     except Exception as e:
@@ -447,7 +405,13 @@ def post_evend():
         return redirect(url_for('index'))
 
     try:
-        result = subprocess.run(['python3', SELENIUM_SCRIPT, file_path], check=True, capture_output=True, text=True)
+        result = subprocess.run(
+            ['python3', SELENIUM_SCRIPT, file_path],
+            check=True,
+            capture_output=True,
+            text=True,
+            env={**os.environ, **form_data}  # Passe les champs au script via variables d'environnement
+        )
         add_import(user_id, nb_items)
         flash("✅ Import e-Vend terminé !")
         if result.stdout:
