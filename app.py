@@ -17,7 +17,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # --- eBay API PROD ---
 EBAY_CLIENT_ID = 'AlexBoss-eVendImp-PRD-bd29c22a7-4a223ad6'
 EBAY_CLIENT_SECRET = 'PRD-d29c22a7bc6d-e864-4ffc-8934-e19a'
-EBAY_REDIRECT_URI = 'https://evend-import-oauth.onrender.com/ebay_callback'  # À changer pour Render
+EBAY_REDIRECT_URI = 'https://evend-import.onrender.com/ebay_callback'  # À changer pour Render
 EBAY_OAUTH_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
 EBAY_TRADING_API_URL = "https://api.ebay.com/ws/api.dll"
 EBAY_COMPAT_LEVEL = "1191"
