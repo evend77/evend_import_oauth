@@ -406,12 +406,32 @@ def post_evend():
         return redirect(url_for('index'))
 
     try:
-        result = subprocess.run(
-            ['python3', SELENIUM_SCRIPT, file_path],
-            check=True,
-            capture_output=True,
-            text=True,
-            env={**os.environ, **form_data}  # Passe les champs au script via variables d'environnement
+       # Préparer les variables d'environnement pour Selenium
+env_vars = os.environ.copy()
+env_vars.update(form_data)
+env_vars["livraison_type"] = "Expédition" if request.form.get("livraison_expedition_check") else "Ramassage"
+env_vars["livraison_ramassage"] = request.form.get("livraison_ramassage") if request.form.get("livraison_ramassage_check") else ""
+
+try:
+    result = subprocess.run(
+        ['python3', SELENIUM_SCRIPT, file_path],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env_vars  # On passe toutes les valeurs du formulaire
+    )
+    add_import(user_id, nb_items)
+    flash("✅ Import e-Vend terminé !")
+    if result.stdout:
+        flash(f"ℹ️ Logs:\n{result.stdout}")
+    if result.stderr:
+        flash(f"⚠️ Erreurs:\n{result.stderr}")
+except subprocess.CalledProcessError as e:
+    flash(f"❌ Erreur import: {e}\nStdout:\n{e.stdout}\nStderr:\n{e.stderr}")
+finally:
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
         )
         add_import(user_id, nb_items)
         flash("✅ Import e-Vend terminé !")
