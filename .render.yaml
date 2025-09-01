@@ -2,6 +2,10 @@ services:
   - type: web
     name: evend-import
     env: python
-    pythonVersion: "3.12"       # ou "3.11" pour downgrade
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn app:app"
+    plan: free
+    pythonVersion: "3.11"
+    repo: https://github.com/evend77/evend_import_oauth
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    autoDeploy: true
