@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: evend-import
+    env: python
+    pythonVersion: "3.12"       # ou "3.11" pour downgrade
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app"
