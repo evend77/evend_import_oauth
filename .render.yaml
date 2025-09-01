@@ -2,6 +2,7 @@ services:
   - type: web
     name: evend-import
     env: python
-    pythonVersion: "3.13"
+    pythonVersion: "3.12"   # downgrade pour compatibilité numpy/pandas
     buildCommand: "pip install -r requirements.txt"
     startCommand: "gunicorn app:app"
+
