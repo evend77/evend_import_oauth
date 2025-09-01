@@ -26,12 +26,19 @@ if df.empty:
     logging.error("Le CSV est vide.")
     sys.exit(1)
 
-# --- Selenium Chrome Headless ---
+# --- Selenium Chrome Headless pour Render ---
+from selenium.webdriver.chrome.service import Service
+
 chrome_options = Options()
 chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
-driver = webdriver.Chrome(options=chrome_options)
+chrome_options.add_argument("--disable-gpu")  # sécurise sur Render
+
+# chemin par défaut sur Render
+chrome_service = Service("/usr/bin/chromedriver")
+driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
+
 wait = WebDriverWait(driver, 10)
 
 # --- URL e-Vend ---
