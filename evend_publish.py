@@ -1,9 +1,10 @@
 import os
 import sys
 import pandas as pd
-import logging
+import requests
 import tempfile
 import time
+import logging
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -15,7 +16,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 # --- Vérification argument CSV ---
 if len(sys.argv) < 2:
-    logging.error("Usage: python evend_publish_batch.py <csv_file>")
+    logging.error("Usage: python evend_publish.py <csv_file>")
     sys.exit(1)
 
 csv_file = sys.argv[1]
@@ -29,8 +30,9 @@ EVEND_PASSWORD = os.environ.get("password")
 LIVRAISON_RAMASSAGE_CHECK = os.environ.get("livraison_ramassage_check") == 'on'
 LIVRAISON_EXPEDITION_CHECK = os.environ.get("livraison_expedition_check") == 'on'
 LIVRAISON_RAMASSAGE = os.environ.get("livraison_ramassage", "")
-FRAIS_PORT_ARTICLE = os.environ.get("frais_port_article", "0")
-FRAIS_PORT_SUP = os.environ.get("frais_port_sup", "0")
+FRAIS_PORT_ARTICLE = float(os.environ.get("frais_port_article", "0"))
+FRAIS_PORT_SUP = float(os.environ.get("frais_port_sup", "0"))
+USER_ID = os.environ.get("user_id", "unknown_user")
 
 if not EVEND_EMAIL or not EVEND_PASSWORD:
     logging.error("❌ Email ou mot de passe e-Vend manquant.")
@@ -47,7 +49,7 @@ if df.empty:
     logging.error("Le CSV est vide.")
     sys.exit(1)
 
-# --- Selenium Chrome Headless ---
+# --- Setup Selenium Chrome Headless ---
 chrome_options = Options()
 chrome_options.add_argument("--headless=new")
 chrome_options.add_argument("--no-sandbox")
@@ -59,9 +61,19 @@ chrome_options.add_experimental_option("prefs", prefs)
 driver = webdriver.Chrome(options=chrome_options)
 wait = WebDriverWait(driver, 20)
 
-# --- URLs e-Vend ---
 EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
 EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
+
+# --- Fichier de log pour index ---
+LOG_FILE = f"/app/uploads/{USER_ID}_import_log.txt"
+
+def write_log(msg):
+    print(msg)
+    try:
+        with open(LOG_FILE, 'a', encoding='utf-8') as f:
+            f.write(msg + "\n")
+    except:
+        pass
 
 # --- Login e-Vend ---
 try:
@@ -71,13 +83,12 @@ try:
     driver.find_element(By.ID, "password").send_keys(EVEND_PASSWORD)
     driver.find_element(By.ID, "loginBtn").click()
     wait.until(EC.presence_of_element_located((By.ID, "dashboard")))
-    logging.info("✅ Connecté à e-Vend avec succès.")
+    write_log("✅ Connecté à e-Vend avec succès.")
 except Exception as e:
-    logging.error(f"❌ Échec du login: {e}")
+    write_log(f"❌ Échec du login: {e}")
     driver.quit()
     sys.exit(1)
 
-# --- Fonctions utilitaires ---
 def check_radio(driver, name, value_to_check):
     try:
         radios = driver.find_elements(By.NAME, name)
@@ -85,8 +96,8 @@ def check_radio(driver, name, value_to_check):
             if r.get_attribute("value") == value_to_check and not r.is_selected():
                 r.click()
                 return True
-    except Exception as e:
-        logging.warning(f"⚠️ Impossible de cocher '{value_to_check}' pour {name}: {e}")
+    except:
+        pass
     return False
 
 def upload_images(driver, image_urls):
@@ -94,24 +105,23 @@ def upload_images(driver, image_urls):
         photo_fields = driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
         for i, url in enumerate(image_urls):
             if i >= len(photo_fields):
-                logging.warning(f"⚠️ Pas assez de champs photo pour l'image {url}")
+                write_log(f"⚠️ Pas assez de champs photo pour l'image {url}")
                 break
             field = photo_fields[i]
             try:
-                import requests
                 response = requests.get(url, timeout=10)
                 if response.status_code == 200:
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
                         tmp_file.write(response.content)
                         tmp_path = tmp_file.name
                     field.send_keys(tmp_path)
-                    logging.info(f"📸 Image uploadée: {url}")
+                    write_log(f"📸 Image uploadée: {url}")
                 else:
-                    logging.warning(f"⚠️ Impossible de télécharger {url}, code {response.status_code}")
+                    write_log(f"⚠️ Impossible de télécharger {url}, code {response.status_code}")
             except Exception as e:
-                logging.warning(f"⚠️ Erreur téléchargement image {url}: {e}")
+                write_log(f"⚠️ Erreur téléchargement image {url}: {e}")
     except Exception as e:
-        logging.warning(f"⚠️ Impossible d’uploader les images: {e}")
+        write_log(f"⚠️ Impossible d’uploader les images: {e}")
 
 def wait_for_success_message():
     try:
@@ -120,17 +130,15 @@ def wait_for_success_message():
     except TimeoutException:
         return False
 
-# --- Publication par lot ---
+# --- Diviser en lots de 20 ---
 BATCH_SIZE = 20
-total_lots = (len(df)-1)//BATCH_SIZE + 1
+batches = [df[i:i+BATCH_SIZE] for i in range(0, len(df), BATCH_SIZE)]
 
-for batch_index, start in enumerate(range(0, len(df), BATCH_SIZE)):
-    batch = df.iloc[start:start+BATCH_SIZE]
-    logging.info(f"🗂️ Traitement lot {batch_index+1}/{total_lots} ({len(batch)} annonces)")
-
-    for index, row in batch.iterrows():
+for batch_index, batch in enumerate(batches):
+    write_log(f"--- DÉBUT lot {batch_index+1}/{len(batches)} ---")
+    for idx, row in batch.iterrows():
         try:
-            logging.info(f"📌 Publication article {index+1}/{len(df)}")
+            write_log(f"📌 Publication article {idx+1} lot {batch_index+1}")
             annonce_type = str(row.get('type_annonce', 'Vente classique') or 'Vente classique')
             categorie = str(row.get('categorie', 'Autre') or 'Autre')
             titre = str(row.get('titre', 'Titre manquant') or 'Titre manquant')
@@ -140,8 +148,6 @@ for batch_index, start in enumerate(range(0, len(df), BATCH_SIZE)):
             garantie = str(row.get('garantie', 'Non') or 'Non')
             prix = float(row.get('prix', 0.0) or 0.0)
             stock = int(row.get('stock', 1) or 1)
-            frais_port_article = float(FRAIS_PORT_ARTICLE or 0.0)
-            frais_port_sup = float(FRAIS_PORT_SUP or 0.0)
 
             image_urls = []
             if 'photo_defaut' in row and pd.notna(row['photo_defaut']):
@@ -166,8 +172,8 @@ for batch_index, start in enumerate(range(0, len(df), BATCH_SIZE)):
                 "garantie": garantie,
                 "prix": str(prix),
                 "stock": str(stock),
-                "frais_port_article": str(frais_port_article),
-                "frais_port_sup": str(frais_port_sup)
+                "frais_port_article": str(FRAIS_PORT_ARTICLE),
+                "frais_port_sup": str(FRAIS_PORT_SUP)
             }
             for field_id, value in fields.items():
                 try:
@@ -176,7 +182,7 @@ for batch_index, start in enumerate(range(0, len(df), BATCH_SIZE)):
                         el.clear()
                     el.send_keys(value)
                 except NoSuchElementException:
-                    logging.warning(f"⚠️ Champ '{field_id}' non trouvé.")
+                    write_log(f"⚠️ Champ '{field_id}' non trouvé.")
 
             check_radio(driver, "livraison_type", livraison_type)
             if livraison_ramassage_value:
@@ -185,7 +191,7 @@ for batch_index, start in enumerate(range(0, len(df), BATCH_SIZE)):
                     ramassage_field.clear()
                     ramassage_field.send_keys(livraison_ramassage_value)
                 except NoSuchElementException:
-                    logging.warning("⚠️ Champ livraison ramassage non trouvé.")
+                    write_log("⚠️ Champ livraison ramassage non trouvé.")
 
             if image_urls:
                 upload_images(driver, image_urls)
@@ -193,19 +199,27 @@ for batch_index, start in enumerate(range(0, len(df), BATCH_SIZE)):
             try:
                 driver.find_element(By.ID, "submitBtn").click()
                 if wait_for_success_message():
-                    logging.info(f"✅ Article publié: {titre}")
+                    write_log(f"✅ Article publié: {titre}")
                 else:
-                    logging.warning(f"⚠️ Pas de confirmation publication pour l'article: {titre}")
+                    write_log(f"⚠️ Pas de confirmation publication pour: {titre}")
             except Exception as e:
-                logging.error(f"❌ Impossible de soumettre l'article {titre}: {e}")
+                write_log(f"❌ Impossible de soumettre l'article {titre}: {e}")
+
+            # --- Keep-alive pour Render gratuit ---
+            try:
+                requests.get("https://evend-import-oauth.onrender.com/")
+            except:
+                pass
+
+            time.sleep(2)  # pause 2s entre articles pour ne pas surcharger
 
         except Exception as e:
-            logging.error(f"❌ Erreur article {index+1}: {e}")
+            write_log(f"❌ Erreur article {idx+1} lot {batch_index+1}: {e}")
             continue
-
-    logging.info(f"✅ Lot {batch_index+1} terminé. Pause 3s avant le suivant...")
-    time.sleep(3)  # petit délai pour alléger la charge serveur
+    write_log(f"--- FIN lot {batch_index+1}/{len(batches)} ---")
+    time.sleep(3)  # pause 3s entre lots pour Render
 
 driver.quit()
-logging.info("🎯 Toutes les publications terminées.")
+write_log("🎯 Toutes les publications terminées.")
+
 
