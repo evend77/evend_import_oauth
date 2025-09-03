@@ -429,7 +429,16 @@ def post_evend():
         )
         add_import(user_id, nb_items)
         flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
-        flash(f"ℹ️ Logs disponibles dans le fichier: {log_file}")
+
+        # --- Lire le log actuel pour l’afficher dans les messages ---
+        if os.path.exists(log_file):
+            with open(log_file, "r", encoding="utf-8") as f:
+                log_content = f.read()
+            # Limiter la taille pour éviter un flash trop long
+            if len(log_content) > 5000:
+                log_content = log_content[:5000] + "\n… [Log tronqué]"
+            flash(f"ℹ️ Logs import e-Vend :\n{log_content}")
+
     except Exception as e:
         flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
     finally:
@@ -437,6 +446,7 @@ def post_evend():
         pass
 
     return redirect(url_for('index'))
+
 
 
 # --- Réinitialiser dernier CSV ---
