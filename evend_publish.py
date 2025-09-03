@@ -66,6 +66,7 @@ EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-0
 
 # --- Fichier de log pour index ---
 LOG_FILE = f"/app/uploads/{USER_ID}_import_log.txt"
+PROGRESS_FILE = f"/app/uploads/progress_{USER_ID}.txt"
 
 def write_log(msg):
     print(msg)
@@ -74,6 +75,28 @@ def write_log(msg):
             f.write(msg + "\n")
     except:
         pass
+
+def save_progress(batch_index, idx):
+    try:
+        with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
+            f.write(f"{batch_index},{idx}\n")
+    except:
+        pass
+
+def load_progress():
+    if os.path.exists(PROGRESS_FILE):
+        try:
+            with open(PROGRESS_FILE, "r", encoding="utf-8") as f:
+                line = f.readline()
+                if line:
+                    parts = line.strip().split(",")
+                    return int(parts[0]), int(parts[1])
+        except:
+            pass
+    return 0, -1  # Si rien, commencer depuis le début
+
+# --- Charger l'état avant de commencer ---
+last_batch, last_idx = load_progress()
 
 # --- Login e-Vend ---
 try:
@@ -135,8 +158,13 @@ BATCH_SIZE = 20
 batches = [df[i:i+BATCH_SIZE] for i in range(0, len(df), BATCH_SIZE)]
 
 for batch_index, batch in enumerate(batches):
+    if batch_index < last_batch:
+        continue  # Passer les lots déjà publiés
     write_log(f"--- DÉBUT lot {batch_index+1}/{len(batches)} ---")
     for idx, row in batch.iterrows():
+        if batch_index == last_batch and idx <= last_idx:
+            continue  # Passer les articles déjà publiés
+
         try:
             write_log(f"📌 Publication article {idx+1} lot {batch_index+1}")
             annonce_type = str(row.get('type_annonce', 'Vente classique') or 'Vente classique')
@@ -211,11 +239,14 @@ for batch_index, batch in enumerate(batches):
             except:
                 pass
 
-            time.sleep(2)  # pause 2s entre articles pour ne pas surcharger
+            # --- Sauvegarde progression ---
+            save_progress(batch_index, idx)
+            time.sleep(2)  # pause 2s entre articles
 
         except Exception as e:
             write_log(f"❌ Erreur article {idx+1} lot {batch_index+1}: {e}")
             continue
+
     write_log(f"--- FIN lot {batch_index+1}/{len(batches)} ---")
     time.sleep(3)  # pause 3s entre lots pour Render
 
