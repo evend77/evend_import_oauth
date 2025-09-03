@@ -12,8 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
-# --- Logging avec flush immédiat pour Render ---
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", force=True)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # --- Vérification argument CSV ---
 if len(sys.argv) < 2:
@@ -56,6 +55,8 @@ chrome_options.add_argument("--headless=new")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-gpu")
+chrome_options.add_argument("--disable-extensions")
+chrome_options.add_argument("--disable-plugins")
 prefs = {"profile.managed_default_content_settings.images": 2}
 chrome_options.add_experimental_option("prefs", prefs)
 
@@ -70,11 +71,10 @@ LOG_FILE = f"/app/uploads/{USER_ID}_import_log.txt"
 PROGRESS_FILE = f"/app/uploads/progress_{USER_ID}.txt"
 
 def write_log(msg):
-    print(msg, flush=True)
+    print(msg)
     try:
         with open(LOG_FILE, 'a', encoding='utf-8') as f:
             f.write(msg + "\n")
-            f.flush()
     except:
         pass
 
@@ -82,7 +82,6 @@ def save_progress(batch_index, idx):
     try:
         with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
             f.write(f"{batch_index},{idx}\n")
-            f.flush()
     except:
         pass
 
@@ -98,7 +97,6 @@ def load_progress():
             pass
     return 0, -1  # Si rien, commencer depuis le début
 
-# --- Charger l'état avant de commencer ---
 last_batch, last_idx = load_progress()
 
 # --- Login e-Vend ---
@@ -135,13 +133,15 @@ def upload_images(driver, image_urls):
                 break
             field = photo_fields[i]
             try:
-                response = requests.get(url, timeout=10)
+                response = requests.get(url, timeout=10, stream=True)
                 if response.status_code == 200:
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
-                        tmp_file.write(response.content)
+                        for chunk in response.iter_content(1024):
+                            tmp_file.write(chunk)
                         tmp_path = tmp_file.name
                     field.send_keys(tmp_path)
                     write_log(f"📸 Image uploadée: {url}")
+                    os.remove(tmp_path)  # <-- suppression immédiate pour libérer la mémoire
                 else:
                     write_log(f"⚠️ Impossible de télécharger {url}, code {response.status_code}")
             except Exception as e:
@@ -156,8 +156,8 @@ def wait_for_success_message():
     except TimeoutException:
         return False
 
-# --- Diviser en lots de 20 ---
-BATCH_SIZE = 20
+# --- Diviser en lots plus petits pour Render ---
+BATCH_SIZE = 5  # <-- réduit pour limiter la RAM
 batches = [df[i:i+BATCH_SIZE] for i in range(0, len(df), BATCH_SIZE)]
 
 for batch_index, batch in enumerate(batches):
@@ -236,22 +236,22 @@ for batch_index, batch in enumerate(batches):
             except Exception as e:
                 write_log(f"❌ Impossible de soumettre l'article {titre}: {e}")
 
-            # --- Keep-alive pour Render gratuit ---
-            try:
-                requests.get("https://evend-import-oauth.onrender.com/")
-            except:
-                pass
+            # --- Keep-alive réduit : une fois par lot ---
+            if idx == 0:
+                try:
+                    requests.get("https://evend-import-oauth.onrender.com/", timeout=5)
+                except:
+                    pass
 
-            # --- Sauvegarde progression ---
             save_progress(batch_index, idx)
-            time.sleep(2)  # pause 2s entre articles
+            time.sleep(2)
 
         except Exception as e:
             write_log(f"❌ Erreur article {idx+1} lot {batch_index+1}: {e}")
             continue
 
     write_log(f"--- FIN lot {batch_index+1}/{len(batches)} ---")
-    time.sleep(3)  # pause 3s entre lots pour Render
+    time.sleep(3)
 
 driver.quit()
 write_log("🎯 Toutes les publications terminées.")
