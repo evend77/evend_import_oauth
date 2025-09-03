@@ -193,127 +193,88 @@
                         <!-- Prix -->
                         <div class="mb-2">
                             <label class="form-label">Prix ($) -minimun 5$</label>
-                            <input type="number" class="form-control" name="prix" value="5" min="0">
+                            <input type="number" class="form-control" name="prix" value="0" step="0.01" min="5">
                         </div>
 
                         <!-- Stock -->
                         <div class="mb-2">
-                            <label class="form-label">Stock</label>
+                            <label class="form-label">Stock disponible</label>
                             <input type="number" class="form-control" name="stock" value="1" min="1">
+                        </div>
+
+                        <!-- Frais de port -->
+                        <div class="mb-2">
+                            <label class="form-label">Frais de port pour le 1er article ($)</label>
+                            <input type="number" class="form-control" name="frais_port_article" value="0" step="0.01" min="0">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Frais de port supplémentaire par article ($)</label>
+                            <input type="number" class="form-control" name="frais_port_sup" value="0" step="0.01" min="0">
+                        </div>
+
+                        <!-- Photo par défaut -->
+                        <div class="mb-2">
+                            <label class="form-label">URL de photo par défaut</label>
+                            <input type="text" class="form-control" name="photo_defaut" placeholder="https://...">
                         </div>
 
                         <!-- Options de livraison -->
                         <div class="mb-2">
-                            <h6 class="fw-bold">Options de livraison</h6>
-
-                            <!-- Ramassage sur place -->
-                            <div class="form-check mb-1">
+                            <label class="form-label fw-bold">Mode de livraison</label>
+                            <div class="form-check">
                                 <input class="form-check-input" type="checkbox" name="livraison_ramassage_check" id="livraison_ramassage_check">
-                                <label class="form-check-label" for="livraison_ramassage_check">
-                                    Ramassage sur place
-                                </label>
+                                <label class="form-check-label" for="livraison_ramassage_check">Ramassage sur place</label>
+                                <input type="text" class="form-control mt-1" name="livraison_ramassage" placeholder="Adresse de ramassage" style="display:none;">
                             </div>
-                            <label class="form-label">Adresse du ramassage</label>
-                            <input type="text" class="form-control mb-2" name="livraison_ramassage" placeholder="Adresse du ramassage" value="123 Rue Exemple, Montréal">
-
-                            <!-- Expédition par transporteur -->
-                            <div class="form-check mb-1">
-                                <input class="form-check-input" type="checkbox" name="livraison_expedition_check" id="livraison_expedition_check" checked>
-                                <label class="form-check-label" for="livraison_expedition_check">
-                                    Expédition par transporteur
-                                </label>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" name="livraison_expedition_check" id="livraison_expedition_check">
+                                <label class="form-check-label" for="livraison_expedition_check">Expédition par transporteur</label>
                             </div>
-                            <label class="form-label">Frais de port pour un article</label>
-                            <input type="number" class="form-control mb-1" name="frais_port_article" value="5">
-                            <label class="form-label">Frais de port pour les articles supplémentaires</label>
-                            <input type="number" class="form-control mb-1" name="frais_port_sup" value="2">
-                        </div>
-
-                        <!-- Photo -->
-                        <div class="mb-2">
-                            <label class="form-label">Photo par défaut (si eBay ne fournit pas)</label>
-                            <input type="text" class="form-control" name="photo_defaut" value="https://drive.google.com/file/d/1Hxe2ZKcGDD1TSaQzP8ho0GRoj4Cio7n3/view?usp=sharing">
                         </div>
                     </div>
 
-                    <!-- Bouton importer -->
-                    <button type="submit" class="btn btn-success btn-lg w-100 mb-3">
-                        📤 Importer sur e-Vend
-                    </button>
-
-                    <!-- Texte explicatif pour options supplémentaires -->
-                    <p class="text-center text-muted mb-2"><em>Options supplémentaires / outils de gestion</em></p>
-
-                    <!-- Séparation visuelle pour options supplémentaires -->
-                    <hr class="my-4 border border-secondary border-2 rounded">
-
-                </form>
-
-            <!-- Réinitialiser le dernier CSV eBay -->
-            <div class="mb-4">
-                <h2 class="h5 text-secondary" style="font-weight: 900;"><strong>🧹 Réinitialiser le dernier CSV eBay</strong></h2>
-                <form action="{{ url_for('reset_csv') }}" method="post">
-                    <button type="submit" class="btn btn-warning btn-lg w-100">
-                        🔄 Supprimer le dernier CSV
+                    <button type="submit" class="btn btn-primary btn-lg w-100">
+                        🚀 Importer sur e-Vend
                     </button>
                 </form>
             </div>
 
-            <!-- Déconnexion eBay avec titre -->
-            <div class="mb-4">
-                <h2 class="h5 text-secondary" style="font-weight: 900;"><strong>🔓 Vous pouvez vous déconnecter de eBay ici</strong></h2>
-                <div class="text-center">
-                    <a href="{{ url_for('logout_ebay') }}" class="btn btn-danger btn-lg w-100 mt-2">
-                        🔓 Se déconnecter de eBay
-                    </a>
-                </div>
+            <!-- Bloc log dynamique -->
+            <div class="alert alert-warning-custom">
+                <h6 class="fw-bold">Logs d’import en arrière-plan</h6>
+                <pre id="log-content" style="max-height: 300px; overflow-y: auto;"></pre>
             </div>
-
-            <!-- Limites d'importation -->
-            <div class="alert alert-warning-custom mt-4">
-                <h5 class="fw-bold">⚠️ Limites d'importation :</h5>
-                <ul class="mb-0">
-                    <li>📁 <strong>500 articles maximum</strong> par fichier CSV</li>
-                    <li>📅 <strong>2000 articles maximum</strong> par utilisateur et par jour</li>
-                </ul>
-            </div>
-
-            <!-- Suivi aujourd'hui -->
-            <div class="alert alert-warning-custom mt-3 text-center">
-                <h5 class="fw-bold">📊 Suivi aujourd'hui</h5>
-                <p class="mb-0">Articles importés aujourd'hui : <strong>{{ today_imported }}</strong></p>
-                <p class="mb-0">Articles restants disponibles : <strong>{{ remaining_quota }}</strong></p>
-            </div>
-
-            <!-- Affichage log (depuis Flask) -->
-            <div class="alert alert-info-custom mt-4">
-                <h6 class="fw-bold">📄 Contenu du log :</h6>
-                <pre id="log-content">{{ log_content }}</pre>
-            </div>
-
         {% endif %}
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
-<!-- Script pour log dynamique -->
+<!-- Script pour log dynamique et masquage adresse ramassage -->
 <script>
 function refreshLog() {
-    fetch('{{ url_for("get_log") }}')
-        .then(response => response.text())
+    fetch('{{ url_for("get_import_log") }}')
+        .then(response => response.json())
         .then(data => {
-            document.getElementById('log-content').textContent = data;
+            document.getElementById('log-content').textContent = data.log;
         })
         .catch(err => console.error('Erreur récupération log:', err));
 }
 
 // Rafraîchir toutes les 5 secondes
 setInterval(refreshLog, 5000);
+
+// Masquer/afficher l'adresse de ramassage
+function toggleRamassage() {
+    const check = document.getElementById('livraison_ramassage_check');
+    const input = document.querySelector('input[name="livraison_ramassage"]');
+    input.style.display = check.checked ? 'block' : 'none';
+}
+
+// Initialisation
+document.getElementById('livraison_ramassage_check').addEventListener('change', toggleRamassage);
+window.addEventListener('load', toggleRamassage);
 </script>
 
 </body>
 </html>
-
-
-
