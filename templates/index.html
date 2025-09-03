@@ -286,19 +286,34 @@
             </div>
 
             <!-- Affichage log (depuis Flask) -->
-            {% if log_content %}
             <div class="alert alert-info-custom mt-4">
                 <h6 class="fw-bold">📄 Contenu du log :</h6>
-                <pre>{{ log_content }}</pre>
+                <pre id="log-content">{{ log_content }}</pre>
             </div>
-            {% endif %}
 
         {% endif %}
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Script pour log dynamique -->
+<script>
+function refreshLog() {
+    fetch('{{ url_for("get_log") }}')
+        .then(response => response.text())
+        .then(data => {
+            document.getElementById('log-content').textContent = data;
+        })
+        .catch(err => console.error('Erreur récupération log:', err));
+}
+
+// Rafraîchir toutes les 5 secondes
+setInterval(refreshLog, 5000);
+</script>
+
 </body>
 </html>
+
 
 
