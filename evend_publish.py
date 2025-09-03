@@ -64,7 +64,7 @@ wait = WebDriverWait(driver, 20)
 EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
 EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
 
-# --- Fichier de log pour index ---
+# --- Fichiers de log et progression ---
 LOG_FILE = f"/app/uploads/{USER_ID}_import_log.txt"
 PROGRESS_FILE = f"/app/uploads/progress_{USER_ID}.txt"
 
@@ -252,5 +252,3 @@ for batch_index, batch in enumerate(batches):
 
 driver.quit()
 write_log("🎯 Toutes les publications terminées.")
-
-
