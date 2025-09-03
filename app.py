@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file
+from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file, jsonify
 import os, pandas as pd, requests, subprocess, uuid, sqlite3
 from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
@@ -462,26 +462,28 @@ def reset_csv():
 
     return redirect(url_for('index'))
 
-# --- Nouvelle route pour lire les logs ---
-
+# --- Nouvelle route pour lire les logs (modifiée pour JSON) ---
 @app.route('/get_import_log')
 def get_import_log():
     user_id = session.get('user_id')
     if not user_id:
-        return {"log": "⚠️ Session expirée."}
+        return jsonify({"log": "⚠️ Session expirée."})
 
     log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
     if not os.path.exists(log_file):
-        return {"log": "ℹ️ Pas encore de logs disponibles."}
+        return jsonify({"log": "ℹ️ Pas encore de logs disponibles."})
 
-    # Limiter la taille pour ne pas surcharger le navigateur
-    with open(log_file, 'r') as f:
-        f.seek(0, 2)  # fin du fichier
-        size = f.tell()
-        f.seek(max(size - 5000, 0))
-        logs = f.read()
+    try:
+        # Limiter la taille pour ne pas surcharger le navigateur
+        with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+            f.seek(0, 2)  # fin du fichier
+            size = f.tell()
+            f.seek(max(size - 5000, 0))
+            logs = f.read()
+    except Exception as e:
+        logs = f"❌ Impossible de lire le fichier de log: {e}"
 
-    return {"log": logs}
+    return jsonify({"log": logs})
 
 
 if __name__ == '__main__':
