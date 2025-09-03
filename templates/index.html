@@ -44,6 +44,36 @@
 {% endif %}
 {% endwith %}
 
+<!-- Script pour rafraîchir les logs d'import en quasi temps réel -->
+<script>
+function refreshLogs() {
+    fetch("/get_import_log")
+        .then(response => response.json())
+        .then(data => {
+            const messagesUl = document.querySelector('.alert-info-custom ul');
+            if (messagesUl) {
+                // Vider les anciens logs
+                messagesUl.innerHTML = '';
+                // Ajouter chaque ligne de log
+                data.log.split('\n').forEach(line => {
+                    if (line.trim() !== '') {
+                        const li = document.createElement('li');
+                        li.textContent = line;
+                        messagesUl.appendChild(li);
+                    }
+                });
+                // Faire défiler automatiquement vers le bas
+                messagesUl.scrollTop = messagesUl.scrollHeight;
+            }
+        })
+        .catch(err => console.error("Erreur récupération logs:", err));
+}
+
+// Rafraîchir toutes les 3 secondes
+setInterval(refreshLogs, 3000);
+</script>
+
+
         {% if not connected %}
             <div class="text-center">
                 <p class="mb-3">Vous devez connecter votre compte eBay pour continuer.</p>
