@@ -5,6 +5,7 @@ import requests
 import tempfile
 import time
 import logging
+from flask import Flask, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -12,17 +13,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
+# --- Logging ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-# --- Vérification argument CSV ---
-if len(sys.argv) < 2:
-    logging.error("Usage: python evend_publish.py <csv_file>")
-    sys.exit(1)
-
-csv_file = sys.argv[1]
-if not os.path.exists(csv_file):
-    logging.error(f"Fichier CSV introuvable: {csv_file}")
-    sys.exit(1)
 
 # --- Variables d'environnement ---
 EVEND_EMAIL = os.environ.get("email")
@@ -36,35 +28,9 @@ USER_ID = os.environ.get("user_id", "unknown_user")
 
 if not EVEND_EMAIL or not EVEND_PASSWORD:
     logging.error("❌ Email ou mot de passe e-Vend manquant.")
-    sys.exit(1)
 
-# --- Lecture CSV ---
-try:
-    df = pd.read_csv(csv_file)
-except Exception as e:
-    logging.error(f"❌ Impossible de lire le CSV: {e}")
-    sys.exit(1)
-
-if df.empty:
-    logging.error("Le CSV est vide.")
-    sys.exit(1)
-
-# --- Setup Selenium Chrome Headless ---
-chrome_options = Options()
-chrome_options.add_argument("--headless=new")
-chrome_options.add_argument("--no-sandbox")
-chrome_options.add_argument("--disable-dev-shm-usage")
-chrome_options.add_argument("--disable-gpu")
-chrome_options.add_argument("--disable-extensions")
-chrome_options.add_argument("--disable-plugins")
-prefs = {"profile.managed_default_content_settings.images": 2}
-chrome_options.add_experimental_option("prefs", prefs)
-
-driver = webdriver.Chrome(options=chrome_options)
-wait = WebDriverWait(driver, 20)
-
-EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
-EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
+# --- Flask App ---
+app = Flask(__name__)
 
 # --- Fichiers de log et progression ---
 LOG_FILE = f"/app/uploads/{USER_ID}_import_log.txt"
@@ -95,24 +61,25 @@ def load_progress():
                     return int(parts[0]), int(parts[1])
         except:
             pass
-    return 0, -1  # Si rien, commencer depuis le début
+    return 0, -1
 
-last_batch, last_idx = load_progress()
+# --- Selenium Setup ---
+def init_driver():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    prefs = {"profile.managed_default_content_settings.images": 2}
+    chrome_options.add_experimental_option("prefs", prefs)
+    driver = webdriver.Chrome(options=chrome_options)
+    wait = WebDriverWait(driver, 20)
+    return driver, wait
 
-# --- Login e-Vend ---
-try:
-    driver.get(EVEND_LOGIN_URL)
-    wait.until(EC.presence_of_element_located((By.ID, "email")))
-    driver.find_element(By.ID, "email").send_keys(EVEND_EMAIL)
-    driver.find_element(By.ID, "password").send_keys(EVEND_PASSWORD)
-    driver.find_element(By.ID, "loginBtn").click()
-    wait.until(EC.presence_of_element_located((By.ID, "dashboard")))
-    write_log("✅ Connecté à e-Vend avec succès.")
-except Exception as e:
-    write_log(f"❌ Échec du login: {e}")
-    driver.quit()
-    sys.exit(1)
+EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
+EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
 
+# --- Fonctions Selenium ---
 def check_radio(driver, name, value_to_check):
     try:
         radios = driver.find_elements(By.NAME, name)
@@ -133,15 +100,13 @@ def upload_images(driver, image_urls):
                 break
             field = photo_fields[i]
             try:
-                response = requests.get(url, timeout=10, stream=True)
+                response = requests.get(url, timeout=10)
                 if response.status_code == 200:
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
-                        for chunk in response.iter_content(1024):
-                            tmp_file.write(chunk)
+                        tmp_file.write(response.content)
                         tmp_path = tmp_file.name
                     field.send_keys(tmp_path)
                     write_log(f"📸 Image uploadée: {url}")
-                    os.remove(tmp_path)  # <-- suppression immédiate pour libérer la mémoire
                 else:
                     write_log(f"⚠️ Impossible de télécharger {url}, code {response.status_code}")
             except Exception as e:
@@ -149,110 +114,156 @@ def upload_images(driver, image_urls):
     except Exception as e:
         write_log(f"⚠️ Impossible d’uploader les images: {e}")
 
-def wait_for_success_message():
+def wait_for_success_message(driver, wait):
     try:
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".success-message, .alert-success")))
         return True
     except TimeoutException:
         return False
 
-# --- Diviser en lots plus petits pour Render ---
-BATCH_SIZE = 5  # <-- réduit pour limiter la RAM
-batches = [df[i:i+BATCH_SIZE] for i in range(0, len(df), BATCH_SIZE)]
+def publish_csv(csv_file):
+    # --- Lecture CSV ---
+    try:
+        df = pd.read_csv(csv_file)
+    except Exception as e:
+        write_log(f"❌ Impossible de lire le CSV: {e}")
+        return
 
-for batch_index, batch in enumerate(batches):
-    if batch_index < last_batch:
-        continue  # Passer les lots déjà publiés
-    write_log(f"--- DÉBUT lot {batch_index+1}/{len(batches)} ---")
-    for idx, row in batch.iterrows():
-        if batch_index == last_batch and idx <= last_idx:
-            continue  # Passer les articles déjà publiés
+    if df.empty:
+        write_log("Le CSV est vide.")
+        return
 
-        try:
-            write_log(f"📌 Publication article {idx+1} lot {batch_index+1}")
-            annonce_type = str(row.get('type_annonce', 'Vente classique') or 'Vente classique')
-            categorie = str(row.get('categorie', 'Autre') or 'Autre')
-            titre = str(row.get('titre', 'Titre manquant') or 'Titre manquant')
-            description = str(row.get('description', 'Description non disponible') or 'Description non disponible')
-            condition = str(row.get('condition', 'Non spécifié') or 'Non spécifié')
-            retour = str(row.get('retour', 'Non') or 'Non')
-            garantie = str(row.get('garantie', 'Non') or 'Non')
-            prix = float(row.get('prix', 0.0) or 0.0)
-            stock = int(row.get('stock', 1) or 1)
+    last_batch, last_idx = load_progress()
+    driver, wait = init_driver()
 
-            image_urls = []
-            if 'photo_defaut' in row and pd.notna(row['photo_defaut']):
-                image_urls = [img.strip() for img in str(row['photo_defaut']).replace(';', ',').split(',') if img.strip()]
+    # --- Login ---
+    try:
+        driver.get(EVEND_LOGIN_URL)
+        wait.until(EC.presence_of_element_located((By.ID, "email")))
+        driver.find_element(By.ID, "email").send_keys(EVEND_EMAIL)
+        driver.find_element(By.ID, "password").send_keys(EVEND_PASSWORD)
+        driver.find_element(By.ID, "loginBtn").click()
+        wait.until(EC.presence_of_element_located((By.ID, "dashboard")))
+        write_log("✅ Connecté à e-Vend avec succès.")
+    except Exception as e:
+        write_log(f"❌ Échec du login: {e}")
+        driver.quit()
+        return
 
-            livraison_type = "Expédition"
-            livraison_ramassage_value = ""
-            if LIVRAISON_RAMASSAGE_CHECK:
-                livraison_type = "Ramassage"
-                livraison_ramassage_value = LIVRAISON_RAMASSAGE
+    # --- Diviser en lots ---
+    BATCH_SIZE = 20
+    batches = [df[i:i+BATCH_SIZE] for i in range(0, len(df), BATCH_SIZE)]
 
-            driver.get(EVEND_NEW_LISTING_URL)
-            wait.until(EC.presence_of_element_located((By.ID, "type_annonce")))
-
-            fields = {
-                "type_annonce": annonce_type,
-                "categorie": categorie,
-                "titre": titre,
-                "description": description,
-                "condition": condition,
-                "retour": retour,
-                "garantie": garantie,
-                "prix": str(prix),
-                "stock": str(stock),
-                "frais_port_article": str(FRAIS_PORT_ARTICLE),
-                "frais_port_sup": str(FRAIS_PORT_SUP)
-            }
-            for field_id, value in fields.items():
-                try:
-                    el = driver.find_element(By.ID, field_id)
-                    if field_id in ["prix", "stock", "frais_port_article", "frais_port_sup"]:
-                        el.clear()
-                    el.send_keys(value)
-                except NoSuchElementException:
-                    write_log(f"⚠️ Champ '{field_id}' non trouvé.")
-
-            check_radio(driver, "livraison_type", livraison_type)
-            if livraison_ramassage_value:
-                try:
-                    ramassage_field = driver.find_element(By.ID, "livraison_ramassage")
-                    ramassage_field.clear()
-                    ramassage_field.send_keys(livraison_ramassage_value)
-                except NoSuchElementException:
-                    write_log("⚠️ Champ livraison ramassage non trouvé.")
-
-            if image_urls:
-                upload_images(driver, image_urls)
+    for batch_index, batch in enumerate(batches):
+        if batch_index < last_batch:
+            continue
+        write_log(f"--- DÉBUT lot {batch_index+1}/{len(batches)} ---")
+        for idx, row in batch.iterrows():
+            if batch_index == last_batch and idx <= last_idx:
+                continue
 
             try:
-                driver.find_element(By.ID, "submitBtn").click()
-                if wait_for_success_message():
-                    write_log(f"✅ Article publié: {titre}")
-                else:
-                    write_log(f"⚠️ Pas de confirmation publication pour: {titre}")
-            except Exception as e:
-                write_log(f"❌ Impossible de soumettre l'article {titre}: {e}")
+                write_log(f"📌 Publication article {idx+1} lot {batch_index+1}")
+                annonce_type = str(row.get('type_annonce', 'Vente classique') or 'Vente classique')
+                categorie = str(row.get('categorie', 'Autre') or 'Autre')
+                titre = str(row.get('titre', 'Titre manquant') or 'Titre manquant')
+                description = str(row.get('description', 'Description non disponible') or 'Description non disponible')
+                condition = str(row.get('condition', 'Non spécifié') or 'Non spécifié')
+                retour = str(row.get('retour', 'Non') or 'Non')
+                garantie = str(row.get('garantie', 'Non') or 'Non')
+                prix = float(row.get('prix', 0.0) or 0.0)
+                stock = int(row.get('stock', 1) or 1)
 
-            # --- Keep-alive réduit : une fois par lot ---
-            if idx == 0:
+                image_urls = []
+                if 'photo_defaut' in row and pd.notna(row['photo_defaut']):
+                    image_urls = [img.strip() for img in str(row['photo_defaut']).replace(';', ',').split(',') if img.strip()]
+
+                livraison_type = "Expédition"
+                livraison_ramassage_value = ""
+                if LIVRAISON_RAMASSAGE_CHECK:
+                    livraison_type = "Ramassage"
+                    livraison_ramassage_value = LIVRAISON_RAMASSAGE
+
+                driver.get(EVEND_NEW_LISTING_URL)
+                wait.until(EC.presence_of_element_located((By.ID, "type_annonce")))
+
+                fields = {
+                    "type_annonce": annonce_type,
+                    "categorie": categorie,
+                    "titre": titre,
+                    "description": description,
+                    "condition": condition,
+                    "retour": retour,
+                    "garantie": garantie,
+                    "prix": str(prix),
+                    "stock": str(stock),
+                    "frais_port_article": str(FRAIS_PORT_ARTICLE),
+                    "frais_port_sup": str(FRAIS_PORT_SUP)
+                }
+                for field_id, value in fields.items():
+                    try:
+                        el = driver.find_element(By.ID, field_id)
+                        if field_id in ["prix", "stock", "frais_port_article", "frais_port_sup"]:
+                            el.clear()
+                        el.send_keys(value)
+                    except NoSuchElementException:
+                        write_log(f"⚠️ Champ '{field_id}' non trouvé.")
+
+                check_radio(driver, "livraison_type", livraison_type)
+                if livraison_ramassage_value:
+                    try:
+                        ramassage_field = driver.find_element(By.ID, "livraison_ramassage")
+                        ramassage_field.clear()
+                        ramassage_field.send_keys(livraison_ramassage_value)
+                    except NoSuchElementException:
+                        write_log("⚠️ Champ livraison ramassage non trouvé.")
+
+                if image_urls:
+                    upload_images(driver, image_urls)
+
                 try:
-                    requests.get("https://evend-import-oauth.onrender.com/", timeout=5)
-                except:
-                    pass
+                    driver.find_element(By.ID, "submitBtn").click()
+                    if wait_for_success_message(driver, wait):
+                        write_log(f"✅ Article publié: {titre}")
+                    else:
+                        write_log(f"⚠️ Pas de confirmation publication pour: {titre}")
+                except Exception as e:
+                    write_log(f"❌ Impossible de soumettre l'article {titre}: {e}")
 
-            save_progress(batch_index, idx)
-            time.sleep(2)
+                save_progress(batch_index, idx)
+                time.sleep(2)
 
-        except Exception as e:
-            write_log(f"❌ Erreur article {idx+1} lot {batch_index+1}: {e}")
-            continue
+            except Exception as e:
+                write_log(f"❌ Erreur article {idx+1} lot {batch_index+1}: {e}")
+                continue
 
-    write_log(f"--- FIN lot {batch_index+1}/{len(batches)} ---")
-    time.sleep(3)
+        write_log(f"--- FIN lot {batch_index+1}/{len(batches)} ---")
+        time.sleep(3)
 
-driver.quit()
-write_log("🎯 Toutes les publications terminées.")
+    driver.quit()
+    write_log("🎯 Toutes les publications terminées.")
+
+# --- Endpoint Flask pour lancer le publish ---
+@app.route("/run_publish", methods=["POST"])
+def run_publish():
+    if 'csv_file' not in request.files:
+        return jsonify({"error": "Aucun fichier CSV fourni"}), 400
+    csv_file = request.files['csv_file']
+    temp_path = f"/tmp/{csv_file.filename}"
+    csv_file.save(temp_path)
+    publish_csv(temp_path)
+    return jsonify({"status": "Publication terminée"}), 200
+
+# --- Endpoint pour récupérer les logs ---
+@app.route("/get_import_log", methods=["GET"])
+def get_import_log():
+    if os.path.exists(LOG_FILE):
+        with open(LOG_FILE, "r", encoding="utf-8") as f:
+            return f.read(), 200
+    return "Aucun log trouvé.", 200
+
+# --- Flask run ---
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
 
