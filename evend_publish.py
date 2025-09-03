@@ -12,7 +12,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+# --- Logging avec flush immédiat pour Render ---
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", force=True)
 
 # --- Vérification argument CSV ---
 if len(sys.argv) < 2:
@@ -69,10 +70,11 @@ LOG_FILE = f"/app/uploads/{USER_ID}_import_log.txt"
 PROGRESS_FILE = f"/app/uploads/progress_{USER_ID}.txt"
 
 def write_log(msg):
-    print(msg)
+    print(msg, flush=True)
     try:
         with open(LOG_FILE, 'a', encoding='utf-8') as f:
             f.write(msg + "\n")
+            f.flush()
     except:
         pass
 
@@ -80,6 +82,7 @@ def save_progress(batch_index, idx):
     try:
         with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
             f.write(f"{batch_index},{idx}\n")
+            f.flush()
     except:
         pass
 
@@ -252,3 +255,4 @@ for batch_index, batch in enumerate(batches):
 
 driver.quit()
 write_log("🎯 Toutes les publications terminées.")
+
