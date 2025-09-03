@@ -410,59 +410,34 @@ def post_evend():
 
     # --- Préparer les variables d'environnement pour Selenium ---
     env_vars = os.environ.copy()
-    env_vars["email"] = form_data.get("email", "")
-    env_vars["password"] = form_data.get("password", "")
-    env_vars["type_annonce"] = form_data.get("type_annonce", "Vente classique")
-    env_vars["categorie"] = form_data.get("categorie", "Autre")
-    env_vars["titre"] = form_data.get("titre", "Titre manquant")
-    env_vars["description"] = form_data.get("description", "Description non disponible")
-    env_vars["condition"] = form_data.get("condition", "Non spécifié")
-    env_vars["retour"] = form_data.get("retour", "Non")
-    env_vars["garantie"] = form_data.get("garantie", "Non")
-    env_vars["prix"] = form_data.get("prix", "0")
-    env_vars["stock"] = form_data.get("stock", "1")
-    env_vars["frais_port_article"] = form_data.get("frais_port_article", "0")
-    env_vars["frais_port_sup"] = form_data.get("frais_port_sup", "0")
-    env_vars["photo_defaut"] = form_data.get("photo_defaut", "")
+    for key, value in form_data.items():
+        env_vars[key] = str(value)
 
-    # --- Livraison ---
     env_vars["livraison_ramassage_check"] = "on" if request.form.get("livraison_ramassage_check") else ""
     env_vars["livraison_expedition_check"] = "on" if request.form.get("livraison_expedition_check") else ""
     env_vars["livraison_ramassage"] = request.form.get("livraison_ramassage", "")
 
-    # --- Lancer Selenium ---
+    # --- Lancer Selenium en arrière-plan ---
     try:
-        # Selenium Manager pour Render (headless)
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-
-        driver = webdriver.Chrome(options=chrome_options)  # Selenium Manager télécharge le driver automatiquement
-        driver.quit()
-
-        # Ensuite lancer ton script classique
-        result = subprocess.run(
+        log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
+        subprocess.Popen(
             ['python3', SELENIUM_SCRIPT, file_path],
-            check=True,
-            capture_output=True,
-            text=True,
-            env=env_vars
+            env=env_vars,
+            stdout=open(log_file, 'a'),
+            stderr=open(log_file, 'a'),
+            start_new_session=True
         )
         add_import(user_id, nb_items)
-        flash("✅ Import e-Vend terminé !")
-        if result.stdout:
-            flash(f"ℹ️ Logs:\n{result.stdout}")
-        if result.stderr:
-            flash(f"⚠️ Erreurs:\n{result.stderr}")
-    except subprocess.CalledProcessError as e:
-        flash(f"❌ Erreur import: {e}\nStdout:\n{e.stdout}\nStderr:\n{e.stderr}")
+        flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
+        flash(f"ℹ️ Logs disponibles dans le fichier: {log_file}")
+    except Exception as e:
+        flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
     finally:
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        # Le CSV reste pour le script en arrière-plan, on ne le supprime pas immédiatement
+        pass
 
     return redirect(url_for('index'))
+
 
 # --- Réinitialiser dernier CSV ---
 @app.route('/reset_csv', methods=['GET', 'POST'])
