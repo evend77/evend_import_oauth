@@ -24,25 +24,25 @@
         </div>
 
         <!-- Bloc regroupé messages + connecté eBay -->
-        {% with messages = get_flashed_messages() %}
-        {% if messages or connected %}
-            <div class="alert-info-custom">
-                {% if messages %}
-                    <h5 class="fw-bold text-center mb-3">Messages</h5>
-                    <ul class="mb-0">
-                        {% for message in messages %}
-                            <li>{{ message }}</li>
-                        {% endfor %}
-                    </ul>
-                {% endif %}
-                {% if connected %}
-                    <div class="alert-success-custom text-center fw-bold">
-                        ✅ Vous êtes connecté à eBay !
-                    </div>
-                {% endif %}
+{% with messages = get_flashed_messages() %}
+{% if messages or connected %}
+    <div class="alert-info-custom">
+        {% if messages %}
+            <h5 class="fw-bold text-center mb-3">Messages</h5>
+            <ul class="mb-0" style="max-height: 200px; overflow-y: auto; padding-left: 20px;">
+                {% for message in messages %}
+                    <li>{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        {% if connected %}
+            <div class="alert-success-custom text-center fw-bold">
+                ✅ Vous êtes connecté à eBay !
             </div>
         {% endif %}
-        {% endwith %}
+    </div>
+{% endif %}
+{% endwith %}
 
         {% if not connected %}
             <div class="text-center">
