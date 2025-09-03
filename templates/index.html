@@ -24,55 +24,53 @@
         </div>
 
         <!-- Bloc regroupé messages + connecté eBay -->
-{% with messages = get_flashed_messages() %}
-{% if messages or connected %}
-    <div class="alert-info-custom">
-        {% if messages %}
-            <h5 class="fw-bold text-center mb-3">Messages</h5>
-            <ul class="mb-0" style="max-height: 200px; overflow-y: auto; padding-left: 20px;">
-                {% for message in messages %}
-                    <li>{{ message }}</li>
-                {% endfor %}
-            </ul>
-        {% endif %}
-        {% if connected %}
-            <div class="alert-success-custom text-center fw-bold">
-                ✅ Vous êtes connecté à eBay !
+        {% with messages = get_flashed_messages() %}
+        {% if messages or connected %}
+            <div class="alert-info-custom">
+                {% if messages %}
+                    <h5 class="fw-bold text-center mb-3">Messages</h5>
+                {% endif %}
+                {% if connected %}
+                    <div class="alert-success-custom text-center fw-bold">
+                        ✅ Vous êtes connecté à eBay !
+                    </div>
+                {% endif %}
+                <!-- UL pour les logs live -->
+                <ul id="import-log" style="max-height: 200px; overflow-y: auto; padding-left: 20px; margin-top: 10px;">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <li>{{ message }}</li>
+                        {% endfor %}
+                    {% endif %}
+                </ul>
             </div>
         {% endif %}
-    </div>
-{% endif %}
-{% endwith %}
+        {% endwith %}
 
-<!-- Script pour rafraîchir les logs d'import en quasi temps réel -->
-<script>
-function refreshLogs() {
-    fetch("/get_import_log")
-        .then(response => response.json())
-        .then(data => {
-            const messagesUl = document.querySelector('.alert-info-custom ul');
-            if (messagesUl) {
-                // Vider les anciens logs
-                messagesUl.innerHTML = '';
-                // Ajouter chaque ligne de log
-                data.log.split('\n').forEach(line => {
-                    if (line.trim() !== '') {
-                        const li = document.createElement('li');
-                        li.textContent = line;
-                        messagesUl.appendChild(li);
+        <!-- Script pour rafraîchir les logs d'import en quasi temps réel -->
+        <script>
+        function refreshLogs() {
+            fetch("/get_import_log")
+                .then(response => response.json())
+                .then(data => {
+                    const messagesUl = document.getElementById('import-log');
+                    if (messagesUl) {
+                        messagesUl.innerHTML = '';
+                        data.log.split('\n').forEach(line => {
+                            if (line.trim() !== '') {
+                                const li = document.createElement('li');
+                                li.textContent = line;
+                                messagesUl.appendChild(li);
+                            }
+                        });
+                        messagesUl.scrollTop = messagesUl.scrollHeight;
                     }
-                });
-                // Faire défiler automatiquement vers le bas
-                messagesUl.scrollTop = messagesUl.scrollHeight;
-            }
-        })
-        .catch(err => console.error("Erreur récupération logs:", err));
-}
-
-// Rafraîchir toutes les 3 secondes
-setInterval(refreshLogs, 3000);
-</script>
-
+                })
+                .catch(err => console.error("Erreur récupération logs:", err));
+        }
+        setInterval(refreshLogs, 3000);
+        refreshLogs();  // premier affichage immédiat
+        </script>
 
         {% if not connected %}
             <div class="text-center">
@@ -322,3 +320,4 @@ setInterval(refreshLogs, 3000);
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+
