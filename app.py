@@ -429,16 +429,7 @@ def post_evend():
         )
         add_import(user_id, nb_items)
         flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
-
-        # --- Lire le log actuel pour l’afficher dans les messages ---
-        if os.path.exists(log_file):
-            with open(log_file, "r", encoding="utf-8") as f:
-                log_content = f.read()
-            # Limiter la taille pour éviter un flash trop long
-            if len(log_content) > 5000:
-                log_content = log_content[:5000] + "\n… [Log tronqué]"
-            flash(f"ℹ️ Logs import e-Vend :\n{log_content}")
-
+        flash(f"ℹ️ Logs disponibles dans la section messages / fichier: {log_file}")
     except Exception as e:
         flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
     finally:
@@ -446,6 +437,7 @@ def post_evend():
         pass
 
     return redirect(url_for('index'))
+
 
 
 
@@ -469,6 +461,28 @@ def reset_csv():
         flash("ℹ️ Aucun CSV précédent à supprimer.")
 
     return redirect(url_for('index'))
+
+# --- Nouvelle route pour lire les logs ---
+
+@app.route('/get_import_log')
+def get_import_log():
+    user_id = session.get('user_id')
+    if not user_id:
+        return {"log": "⚠️ Session expirée."}
+
+    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
+    if not os.path.exists(log_file):
+        return {"log": "ℹ️ Pas encore de logs disponibles."}
+
+    # Limiter la taille pour ne pas surcharger le navigateur
+    with open(log_file, 'r') as f:
+        f.seek(0, 2)  # fin du fichier
+        size = f.tell()
+        f.seek(max(size - 5000, 0))
+        logs = f.read()
+
+    return {"log": logs}
+
 
 if __name__ == '__main__':
     app.run(debug=True)
