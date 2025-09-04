@@ -18,6 +18,35 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 LOCK_FILE = "/tmp/evend_publish.lock"
 QUEUE_FILE = "/tmp/evend_publish_queue.json"
 
+
+# ---------- LOGS PAR UTILISATEUR ----------
+from flask import session, jsonify
+
+# Dictionnaire global pour stocker les logs par utilisateur
+user_logs = {}  # clé = USER_ID, valeur = liste de lignes
+
+# Fonction pour ajouter un log pour un utilisateur
+def add_user_log(user_id, message):
+    if user_id not in user_logs:
+        user_logs[user_id] = []
+    user_logs[user_id].append(message)
+    # On garde les 100 dernières lignes max pour chaque utilisateur
+    if len(user_logs[user_id]) > 100:
+        user_logs[user_id] = user_logs[user_id][-100:]
+
+# Endpoint Flask pour récupérer les logs d'import pour l'utilisateur courant
+@app.route("/get_import_log")
+def get_import_log():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"log": ""})
+    # Retourne les 5 dernières lignes seulement pour l'affichage sur l'index
+    logs = user_logs.get(user_id, [])[-5:]
+    return jsonify({"log": "\n".join(logs)})
+# -----------------------------------------
+
+
+
 # --- dictionnaire global pour logs par utilisateur ---
 user_logs = {}  # clé = USER_ID, valeur = liste de lignes
 
