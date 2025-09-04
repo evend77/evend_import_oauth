@@ -22,13 +22,6 @@ def add_user_log(user_id, message):
     if len(user_logs[user_id]) > 100:
         user_logs[user_id] = user_logs[user_id][-100:]
 
-@app.route("/get_import_log")
-def get_import_log():
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"log": ""})
-    logs = user_logs.get(user_id, [])[-5:]  # 5 dernières lignes
-    return jsonify({"log": "\n".join(logs)})
 
 
 # --- Chemins relatifs pour Render ---
