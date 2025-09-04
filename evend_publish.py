@@ -5,7 +5,7 @@ import requests
 import tempfile
 import time
 import logging
-import gc
+import socket
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -15,14 +15,34 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+LOCK_FILE = "/tmp/evend_publish.lock"
+
+# --- Vérification si un import est déjà en cours ---
+if os.path.exists(LOCK_FILE):
+    logging.error("❌ Notre système est actuellement surchargé. Veuillez réessayer plus tard ou attendre votre tour.")
+    sys.exit(1)
+else:
+    with open(LOCK_FILE, "w") as f:
+        f.write(str(os.getpid()))
+
+# --- Fonction pour libérer le lock ---
+def release_lock():
+    try:
+        if os.path.exists(LOCK_FILE):
+            os.remove(LOCK_FILE)
+    except:
+        pass
+
 # --- Vérification argument CSV ---
 if len(sys.argv) < 2:
     logging.error("Usage: python evend_publish.py <csv_file>")
+    release_lock()
     sys.exit(1)
 
 csv_file = sys.argv[1]
 if not os.path.exists(csv_file):
     logging.error(f"Fichier CSV introuvable: {csv_file}")
+    release_lock()
     sys.exit(1)
 
 # --- Variables d'environnement ---
@@ -37,17 +57,28 @@ USER_ID = os.environ.get("user_id", "unknown_user")
 
 if not EVEND_EMAIL or not EVEND_PASSWORD:
     logging.error("❌ Email ou mot de passe e-Vend manquant.")
+    release_lock()
     sys.exit(1)
 
-# --- Setup Selenium Chrome Headless léger ---
+# --- Lecture CSV ---
+try:
+    df = pd.read_csv(csv_file)
+except Exception as e:
+    logging.error(f"❌ Impossible de lire le CSV: {e}")
+    release_lock()
+    sys.exit(1)
+
+if df.empty:
+    logging.error("Le CSV est vide.")
+    release_lock()
+    sys.exit(1)
+
+# --- Setup Selenium Chrome Headless ---
 chrome_options = Options()
 chrome_options.add_argument("--headless=new")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-gpu")
-chrome_options.add_argument("--disable-extensions")
-chrome_options.add_argument("--disable-background-networking")
-chrome_options.add_argument("--disable-software-rasterizer")
 prefs = {"profile.managed_default_content_settings.images": 2}
 chrome_options.add_experimental_option("prefs", prefs)
 
@@ -86,7 +117,7 @@ def load_progress():
                     return int(parts[0]), int(parts[1])
         except:
             pass
-    return 0, -1  # Si rien, commencer depuis le début
+    return 0, -1
 
 # --- Charger l'état avant de commencer ---
 last_batch, last_idx = load_progress()
@@ -103,8 +134,10 @@ try:
 except Exception as e:
     write_log(f"❌ Échec du login: {e}")
     driver.quit()
+    release_lock()
     sys.exit(1)
 
+# --- Fonctions auxiliaires ---
 def check_radio(driver, name, value_to_check):
     try:
         radios = driver.find_elements(By.NAME, name)
@@ -131,8 +164,7 @@ def upload_images(driver, image_urls):
                         tmp_file.write(response.content)
                         tmp_path = tmp_file.name
                     field.send_keys(tmp_path)
-                    os.unlink(tmp_path)  # Supprime le fichier immédiatement
-                    write_log(f"📸 Image uploadée et fichier temporaire supprimé: {url}")
+                    write_log(f"📸 Image uploadée: {url}")
                 else:
                     write_log(f"⚠️ Impossible de télécharger {url}, code {response.status_code}")
             except Exception as e:
@@ -147,17 +179,17 @@ def wait_for_success_message():
     except TimeoutException:
         return False
 
-# --- Publication par chunks pour faible mémoire ---
+# --- Diviser en lots de 20 ---
 BATCH_SIZE = 20
+batches = [df[i:i+BATCH_SIZE] for i in range(0, len(df), BATCH_SIZE)]
 
-for batch_index, chunk in enumerate(pd.read_csv(csv_file, chunksize=BATCH_SIZE)):
+for batch_index, batch in enumerate(batches):
     if batch_index < last_batch:
-        continue  # Passer les lots déjà publiés
-    write_log(f"--- DÉBUT lot {batch_index+1} ---")
-    for idx, row in chunk.iterrows():
+        continue
+    write_log(f"--- DÉBUT lot {batch_index+1}/{len(batches)} ---")
+    for idx, row in batch.iterrows():
         if batch_index == last_batch and idx <= last_idx:
             continue
-
         try:
             write_log(f"📌 Publication article {idx+1} lot {batch_index+1}")
             annonce_type = str(row.get('type_annonce', 'Vente classique') or 'Vente classique')
@@ -169,11 +201,9 @@ for batch_index, chunk in enumerate(pd.read_csv(csv_file, chunksize=BATCH_SIZE))
             garantie = str(row.get('garantie', 'Non') or 'Non')
             prix = float(row.get('prix', 0.0) or 0.0)
             stock = int(row.get('stock', 1) or 1)
-
             image_urls = []
             if 'photo_defaut' in row and pd.notna(row['photo_defaut']):
                 image_urls = [img.strip() for img in str(row['photo_defaut']).replace(';', ',').split(',') if img.strip()]
-
             livraison_type = "Expédition"
             livraison_ramassage_value = ""
             if LIVRAISON_RAMASSAGE_CHECK:
@@ -226,7 +256,7 @@ for batch_index, chunk in enumerate(pd.read_csv(csv_file, chunksize=BATCH_SIZE))
             except Exception as e:
                 write_log(f"❌ Impossible de soumettre l'article {titre}: {e}")
 
-            # Keep-alive Render
+            # --- Keep-alive pour Render gratuit ---
             try:
                 requests.get("https://evend-import-oauth.onrender.com/")
             except:
@@ -235,18 +265,15 @@ for batch_index, chunk in enumerate(pd.read_csv(csv_file, chunksize=BATCH_SIZE))
             save_progress(batch_index, idx)
             time.sleep(2)
 
-            # Nettoyage mémoire après chaque article
-            gc.collect()
-
         except Exception as e:
             write_log(f"❌ Erreur article {idx+1} lot {batch_index+1}: {e}")
             continue
 
-    write_log(f"--- FIN lot {batch_index+1} ---")
+    write_log(f"--- FIN lot {batch_index+1}/{len(batches)} ---")
     time.sleep(3)
-    gc.collect()  # Nettoyage après chaque lot
 
 driver.quit()
+release_lock()
 write_log("🎯 Toutes les publications terminées.")
 
 
