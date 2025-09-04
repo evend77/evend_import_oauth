@@ -404,6 +404,7 @@ def download_ebay_csv():
     return send_file(csv_path, as_attachment=True, download_name="csv_ebay_pret.csv", mimetype="text/csv")
 
 # --- Import e-Vend ---
+
 @app.route('/post_evend', methods=['GET', 'POST'])
 def post_evend():
     if request.method == 'GET':
@@ -427,6 +428,9 @@ def post_evend():
     file_path = os.path.join(UPLOAD_FOLDER, safe_filename)
     file.save(file_path)
 
+    # Log : fichier uploadé
+    add_user_log_file(user_id, f"📂 Fichier {file.filename} reçu et sauvegardé sous {safe_filename}")
+
     # --- Récupération des champs du formulaire ---
     form_data = {
         "email": request.form.get("evend_email", ""),
@@ -448,17 +452,20 @@ def post_evend():
     # --- Lecture CSV ---
     try:
         df = pd.read_csv(file_path)
+        nb_items = len(df.index)
+        add_user_log_file(user_id, f"📑 Lecture du CSV terminée : {nb_items} lignes trouvées")
     except Exception as e:
         os.remove(file_path)
         flash(f"❌ CSV invalide: {e}")
+        add_user_log_file(user_id, f"❌ CSV invalide : {e}")
         return redirect(url_for('index'))
 
-    nb_items = len(df.index)
     today_imported = get_import_count_today(user_id)
     remaining_quota = max(0, MAX_PER_DAY - today_imported)
     if nb_items > remaining_quota:
         os.remove(file_path)
         flash(f"⚠️ Quota restant: {remaining_quota}, ton fichier contient {nb_items}.")
+        add_user_log_file(user_id, f"⚠️ Import annulé : quota restant {remaining_quota}, fichier {nb_items}")
         return redirect(url_for('index'))
 
     # --- Préparer les variables d'environnement pour Selenium ---
@@ -473,6 +480,8 @@ def post_evend():
     # --- Lancer Selenium en arrière-plan ---
     try:
         log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
+        add_user_log_file(user_id, f"🚀 Lancement Selenium pour {nb_items} articles depuis {file_path}")
+
         subprocess.Popen(
             ['python3', SELENIUM_SCRIPT, file_path],
             env=env_vars,
@@ -483,13 +492,16 @@ def post_evend():
         add_import(user_id, nb_items)
         flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
         flash(f"ℹ️ Logs disponibles dans la section messages / fichier: {log_file}")
+        add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
     except Exception as e:
         flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
+        add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
     finally:
         # Le CSV reste pour le script en arrière-plan, on ne le supprime pas immédiatement
         pass
 
     return redirect(url_for('index'))
+
 
 
 
