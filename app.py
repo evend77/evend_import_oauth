@@ -438,39 +438,26 @@ def post_evend():
         flash("⚠️ Session expirée.")
         return redirect(url_for('index'))
 
-    if 'csv_file' not in request.files:
-        flash("⚠️ Aucun fichier CSV sélectionné.")
-        return redirect(url_for('index'))
+    access_token = get_valid_token(user_id)
+    if not access_token:
+        flash("⚠️ Connecte d’abord ton compte eBay.")
+        return redirect(url_for('login_ebay'))
 
-    file = request.files['csv_file']
-    if file.filename == '':
-        flash("⚠️ Aucun fichier sélectionné.")
-        return redirect(url_for('index'))
-
-    safe_filename = f"csv_ebay_import_{uuid.uuid4().hex}.csv"
-    file_path = os.path.join(UPLOAD_FOLDER, safe_filename)
-    file.save(file_path)
-
-    # Log : fichier uploadé
-    add_user_log_file(user_id, f"📂 Fichier {file.filename} reçu et sauvegardé sous {safe_filename}")
-
-    # --- Récupération des champs du formulaire ---
-    form_data = {
-        "email": request.form.get("evend_email", ""),
-        "password": request.form.get("evend_password", ""),
-        "type_annonce": request.form.get("type_annonce", "Vente classique"),
-        "categorie": request.form.get("categorie", "Autre"),
-        "titre": request.form.get("titre", "Titre manquant"),
-        "description": request.form.get("description", "Description non disponible"),
-        "condition": request.form.get("condition", "Non spécifié"),
-        "retour": request.form.get("retour", "Non"),
-        "garantie": request.form.get("garantie", "Non"),
-        "prix": request.form.get("prix", "0"),
-        "stock": request.form.get("stock", "1"),
-        "frais_port_article": request.form.get("frais_port_article", "0"),
-        "frais_port_sup": request.form.get("frais_port_sup", "0"),
-        "photo_defaut": request.form.get("photo_defaut", "")
-    }
+    # --- Vérifier si un nouveau fichier CSV est uploadé ---
+    file = request.files.get('csv_file')
+    if file and file.filename != '':
+        safe_filename = f"csv_ebay_import_{uuid.uuid4().hex}.csv"
+        file_path = os.path.join(UPLOAD_FOLDER, safe_filename)
+        file.save(file_path)
+        set_last_csv_path(user_id, file_path)
+        add_user_log_file(user_id, f"📂 Fichier {file.filename} reçu et sauvegardé sous {safe_filename}")
+    else:
+        # Aucun fichier uploadé → utiliser le dernier CSV connu
+        file_path = get_last_csv_path(user_id)
+        if not file_path or not os.path.exists(file_path):
+            flash("⚠️ Aucun fichier CSV disponible pour l'import.")
+            return redirect(url_for('index'))
+        add_user_log_file(user_id, f"📂 Utilisation du dernier CSV existant : {file_path}")
 
     # --- Lecture CSV ---
     try:
@@ -478,23 +465,24 @@ def post_evend():
         nb_items = len(df.index)
         add_user_log_file(user_id, f"📑 Lecture du CSV terminée : {nb_items} lignes trouvées")
     except Exception as e:
-        os.remove(file_path)
         flash(f"❌ CSV invalide: {e}")
         add_user_log_file(user_id, f"❌ CSV invalide : {e}")
         return redirect(url_for('index'))
 
+    # --- Vérifier quota journalier ---
     today_imported = get_import_count_today(user_id)
     remaining_quota = max(0, MAX_PER_DAY - today_imported)
     if nb_items > remaining_quota:
-        os.remove(file_path)
         flash(f"⚠️ Quota restant: {remaining_quota}, ton fichier contient {nb_items}.")
         add_user_log_file(user_id, f"⚠️ Import annulé : quota restant {remaining_quota}, fichier {nb_items}")
         return redirect(url_for('index'))
 
     # --- Préparer les variables d'environnement pour Selenium ---
     env_vars = os.environ.copy()
-    for key, value in form_data.items():
-        env_vars[key] = str(value)
+    for key in ["email", "password", "type_annonce", "categorie", "titre", "description", 
+                "condition", "retour", "garantie", "prix", "stock", 
+                "frais_port_article", "frais_port_sup", "photo_defaut"]:
+        env_vars[key] = request.form.get(key, "")
 
     env_vars["livraison_ramassage_check"] = "on" if request.form.get("livraison_ramassage_check") else ""
     env_vars["livraison_expedition_check"] = "on" if request.form.get("livraison_expedition_check") else ""
@@ -514,16 +502,13 @@ def post_evend():
         )
         add_import(user_id, nb_items)
         flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
-        flash(f"ℹ️ Logs disponibles dans la section messages / fichier: {log_file}")
         add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
     except Exception as e:
         flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
         add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
-    finally:
-        # Le CSV reste pour le script en arrière-plan, on ne le supprime pas immédiatement
-        pass
 
     return redirect(url_for('index'))
+
 
 
 
