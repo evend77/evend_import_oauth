@@ -6,7 +6,6 @@ import tempfile
 import time
 import logging
 import json
-import shutil
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -33,7 +32,6 @@ if not os.path.exists(csv_file):
 EVEND_EMAIL = os.environ.get("email")
 EVEND_PASSWORD = os.environ.get("password")
 LIVRAISON_RAMASSAGE_CHECK = os.environ.get("livraison_ramassage_check") == 'on'
-LIVRAISON_EXPEDITION_CHECK = os.environ.get("livraison_expedition_check") == 'on'
 LIVRAISON_RAMASSAGE = os.environ.get("livraison_ramassage", "")
 FRAIS_PORT_ARTICLE = float(os.environ.get("frais_port_article", "0"))
 FRAIS_PORT_SUP = float(os.environ.get("frais_port_sup", "0"))
@@ -88,10 +86,19 @@ queue = enter_queue(USER_ID, len(df))
 position = next(i for i, u in enumerate(queue) if u['id'] == USER_ID)
 if position > 0:
     articles_before = sum(u['articles'] for u in queue[:position])
-    est_time = articles_before * 3
+    est_time = articles_before * 3  # estimation simple : 3s par article
     logging.error(f"⚠️ Système surchargé. Vous êtes en position #{position+1} dans la file d'attente. "
                   f"Temps estimé avant votre tour : ~{est_time} sec.")
     sys.exit(1)
+
+# --- Fonction cleanup ---
+def cleanup_and_exit(driver=None):
+    if driver:
+        try:
+            driver.quit()
+        except:
+            pass
+    leave_queue(USER_ID)
 
 # --- Setup Selenium ---
 def get_driver():
@@ -140,6 +147,7 @@ def load_progress():
 # --- Charger état ---
 last_batch, last_idx = load_progress()
 
+# --- Fonctions auxiliaires ---
 def login(driver, wait):
     driver.get(EVEND_LOGIN_URL)
     wait.until(EC.presence_of_element_located((By.ID, "email")))
@@ -194,10 +202,11 @@ def wait_for_success_message(wait):
     except TimeoutException:
         return False
 
-# --- Diviser en lots de 20 ---
+# --- Diviser en lots ---
 BATCH_SIZE = 20
 batches = [df[i:i+BATCH_SIZE] for i in range(0, len(df), BATCH_SIZE)]
 
+# --- Boucle principale ---
 for batch_index, batch in enumerate(batches):
     if batch_index < last_batch:
         continue
@@ -285,6 +294,7 @@ for batch_index, batch in enumerate(batches):
 
 leave_queue(USER_ID)
 write_log("🎯 Toutes les publications terminées.")
+
 
 
 
