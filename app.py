@@ -10,17 +10,56 @@ from selenium.webdriver.chrome.options import Options
 # --- Création de l'app Flask ---
 app = Flask(__name__)
 app.secret_key = 'UN_SECRET_POUR_SESSION'  # ⚠️ change-le en prod
+# --- Ajouter log utilisateur ---
+def add_user_log_file(user_id, message):
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
+    try:
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(f"[{datetime.utcnow().isoformat()}] {message}\n")
+    except Exception as e:
+        print(f"❌ Impossible d'écrire dans le log {log_file}: {e}")
 
-# --- LOGS PAR UTILISATEUR ---
-user_logs = {}  # clé = USER_ID, valeur = liste de lignes
+# --- Nouvelle route pour lire les logs ---
+@app.route('/get_import_log')
+def get_import_log():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"log": "⚠️ Session expirée ou utilisateur non identifié."})
 
-def add_user_log(user_id, message):
-    if user_id not in user_logs:
-        user_logs[user_id] = []
-    user_logs[user_id].append(message)
-    # garder seulement les 100 dernières lignes
-    if len(user_logs[user_id]) > 100:
-        user_logs[user_id] = user_logs[user_id][-100:]
+    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
+    if not os.path.exists(log_file):
+        # Crée un fichier vide pour éviter que la route retourne toujours "aucun log"
+        open(log_file, 'a').close()
+        return jsonify({"log": "ℹ️ Log créé, en attente d’événements..."})
+
+    try:
+        with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+            f.seek(0, 2)  # fin
+            size = f.tell()
+            f.seek(max(size - 5000, 0))
+            logs = f.read()
+    except Exception as e:
+        logs = f"❌ Impossible de lire le fichier de log: {e}"
+
+    return jsonify({"log": logs})
+
+# --- Lancement Selenium corrigé ---
+def launch_selenium_import(user_id, file_path, env_vars):
+    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    try:
+        with open(log_file, 'a', encoding='utf-8') as f:
+            subprocess.Popen(
+                ['python3', SELENIUM_SCRIPT, file_path],
+                env=env_vars,
+                stdout=f,
+                stderr=f,
+                start_new_session=True
+            )
+        add_user_log_file(user_id, f"✅ Import lancé pour {file_path}")
+    except Exception as e:
+        add_user_log_file(user_id, f"❌ Impossible de lancer l'import Selenium: {e}")
 
 
 
