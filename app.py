@@ -477,20 +477,21 @@ def reset_csv():
     return redirect(url_for('index'))
 
 # --- Nouvelle route pour lire les logs (modifiée pour JSON) ---
+
 @app.route('/get_import_log')
 def get_import_log():
-    user_id = session.get('user_id')
+    user_id = session.get('user_id')  # Assure-toi que session["user_id"] est défini lors du login
     if not user_id:
-        return jsonify({"log": "⚠️ Session expirée."})
+        return jsonify({"log": "⚠️ Session expirée ou utilisateur non identifié."})
 
-    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
+    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")  # ou "/app/uploads/..." selon ta config
     if not os.path.exists(log_file):
-        return jsonify({"log": "ℹ️ Pas encore de logs disponibles."})
+        return jsonify({"log": "ℹ️ Aucun log disponible pour le moment."})
 
     try:
-        # Limiter la taille pour ne pas surcharger le navigateur
+        # Limiter la lecture aux derniers 5000 caractères pour ne pas surcharger le navigateur
         with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
-            f.seek(0, 2)  # fin du fichier
+            f.seek(0, 2)  # aller à la fin du fichier
             size = f.tell()
             f.seek(max(size - 5000, 0))
             logs = f.read()
@@ -498,25 +499,7 @@ def get_import_log():
         logs = f"❌ Impossible de lire le fichier de log: {e}"
 
     return jsonify({"log": logs})
-    
 
-@app.route("/get_import_log")
-def get_import_log():
-    user_id = session.get("user_id")  # Assure-toi que session["user_id"] est défini lors du login
-    if not user_id:
-        return jsonify({"log": "⚠️ Utilisateur non identifié."})
-    
-    log_file = f"/app/uploads/{user_id}_import_log.txt"
-    if os.path.exists(log_file):
-        try:
-            with open(log_file, "r", encoding="utf-8") as f:
-                content = f.read()
-        except Exception as e:
-            content = f"❌ Impossible de lire le log: {e}"
-    else:
-        content = "🔄 Aucun log disponible pour le moment..."
-    
-    return jsonify({"log": content})
 
 
 
