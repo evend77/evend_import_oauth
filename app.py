@@ -486,8 +486,7 @@ def get_import_log():
     return jsonify({"log": logs})
 
 
-import os
-
+# --- RUN SERVER ---
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))  # Render fournit le PORT
     app.run(host="0.0.0.0", port=port, debug=True)
