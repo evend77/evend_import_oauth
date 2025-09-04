@@ -57,45 +57,40 @@
         {% endwith %}
 
         <!-- Script pour rafraîchir les logs d'import en quasi temps réel -->
-        <script>
-        function refreshLogs() {
-            fetch("/get_import_log")
-                .then(response => response.json())
-                .then(data => {
-                    const messagesUl = document.getElementById('import-log');
-                    if (messagesUl) {
-                        messagesUl.innerHTML = '';
-                        data.log.split('\n').forEach(line => {
-                            if (line.trim() !== '') {
-                                const li = document.createElement('li');
-                                li.textContent = line;
-                                messagesUl.appendChild(li);
-                            }
-                        });
-                        messagesUl.scrollTop = messagesUl.scrollHeight;
+  <script>
+function refreshAllLogs() {
+    fetch("/get_import_log")
+        .then(response => response.json())
+        .then(data => {
+            // Mettre à jour les messages UL
+            const messagesUl = document.getElementById('import-log');
+            if (messagesUl) {
+                messagesUl.innerHTML = '';
+                data.log.split('\n').forEach(line => {
+                    if (line.trim() !== '') {
+                        const li = document.createElement('li');
+                        li.textContent = line;
+                        messagesUl.appendChild(li);
                     }
-                })
-                .catch(err => console.error("Erreur récupération logs:", err));
-        }
-        setInterval(refreshLogs, 3000);
-        refreshLogs();  // premier affichage immédiat
-
-        async function fetchRenderLogs() {
-            try {
-                const response = await fetch('/get_import_log');
-                const data = await response.json();
-                const logDiv = document.getElementById('render-log');
-                if (logDiv) {
-                    logDiv.textContent = data.log || "Aucun log disponible pour le moment...";
-                    logDiv.scrollTop = logDiv.scrollHeight;
-                }
-            } catch(err) {
-                console.error("Erreur récupération logs Render:", err);
+                });
+                messagesUl.scrollTop = messagesUl.scrollHeight;
             }
-        }
-        setInterval(fetchRenderLogs, 3000);
-        fetchRenderLogs();
-        </script>
+
+            // Mettre à jour le div Render log
+            const logDiv = document.getElementById('render-log');
+            if (logDiv) {
+                logDiv.textContent = data.log || "🔄 Aucun log disponible pour le moment...";
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+        })
+        .catch(err => console.error("Erreur récupération logs:", err));
+}
+
+// Rafraîchir toutes les 3 secondes
+setInterval(refreshAllLogs, 3000);
+refreshAllLogs();  // premier affichage immédiat
+</script>
+
 
         {% if not connected %}
             <div class="text-center">
