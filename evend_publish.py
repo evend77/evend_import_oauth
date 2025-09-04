@@ -22,15 +22,15 @@ QUEUE_FILE = "/tmp/evend_publish_queue.json"
 USER_ID = os.environ.get("user_id", f"user_{os.getpid()}")
 LOG_FILE = f"/app/uploads/{USER_ID}_import_log.txt"
 
-# --- Fonction write_log modifiée pour gestion utilisateur ---
+# --- Fonction write_log modifiée pour flush immédiat ---
 def write_log(msg):
-    print(msg)
-    # Ajoute au fichier de log dédié à cet utilisateur
+    print(msg, flush=True)
     try:
         with open(LOG_FILE, 'a', encoding='utf-8') as f:
             f.write(msg + "\n")
+            f.flush()
     except Exception as e:
-        print(f"⚠️ Impossible d'écrire dans le fichier de log: {e}")
+        print(f"⚠️ Impossible d'écrire dans le fichier de log: {e}", flush=True)
 
 # --- Vérification argument CSV ---
 if len(sys.argv) < 2:
@@ -283,9 +283,3 @@ for batch_index, batch in enumerate(batches):
 
 write_log("🎉 Tous les articles ont été traités.")
 cleanup_and_exit()
-
-
-
-
-
-
