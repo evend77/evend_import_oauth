@@ -15,12 +15,14 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-LOCK_FILE = "/tmp/evend_publish.lock"
-QUEUE_FILE = "/tmp/evend_publish_queue.json"
-
 # --- Variables d'environnement ---
 USER_ID = os.environ.get("user_id", f"user_{os.getpid()}")
-LOG_FILE = f"/app/uploads/{USER_ID}_import_log.txt"
+
+# --- Crée le dossier uploads si nécessaire ---
+UPLOAD_FOLDER = "/app/uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+LOG_FILE = os.path.join(UPLOAD_FOLDER, f"{USER_ID}_import_log.txt")
 
 # --- Fonction write_log modifiée pour flush immédiat ---
 def write_log(msg):
@@ -45,11 +47,6 @@ if not os.path.exists(csv_file):
 # --- Variables d'environnement pour e-Vend ---
 EVEND_EMAIL = os.environ.get("email")
 EVEND_PASSWORD = os.environ.get("password")
-LIVRAISON_RAMASSAGE_CHECK = os.environ.get("livraison_ramassage_check") == 'on'
-LIVRAISON_RAMASSAGE = os.environ.get("livraison_ramassage", "")
-FRAIS_PORT_ARTICLE = float(os.environ.get("frais_port_article", "0"))
-FRAIS_PORT_SUP = float(os.environ.get("frais_port_sup", "0"))
-
 if not EVEND_EMAIL or not EVEND_PASSWORD:
     logging.error("❌ Email ou mot de passe e-Vend manquant.")
     write_log("❌ Email ou mot de passe e-Vend manquant.")
@@ -67,6 +64,7 @@ if df.empty:
     logging.error("Le CSV est vide.")
     write_log("Le CSV est vide.")
     sys.exit(1)
+
 
 # --- Gestion file d'attente ---
 def load_queue():
