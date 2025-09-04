@@ -4,7 +4,6 @@ import pandas as pd
 import requests
 import tempfile
 import time
-import logging
 import json
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -13,55 +12,22 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
+# --- Lock et queue ---
 LOCK_FILE = "/tmp/evend_publish.lock"
 QUEUE_FILE = "/tmp/evend_publish_queue.json"
 
-
-# ---------- LOGS PAR UTILISATEUR ----------
-from flask import session, jsonify
-
-# Dictionnaire global pour stocker les logs par utilisateur
+# --- Logs par utilisateur ---
 user_logs = {}  # clé = USER_ID, valeur = liste de lignes
-
-# Fonction pour ajouter un log pour un utilisateur
 def add_user_log(user_id, message):
     if user_id not in user_logs:
         user_logs[user_id] = []
     user_logs[user_id].append(message)
-    # On garde les 100 dernières lignes max pour chaque utilisateur
     if len(user_logs[user_id]) > 100:
         user_logs[user_id] = user_logs[user_id][-100:]
 
-# Endpoint Flask pour récupérer les logs d'import pour l'utilisateur courant
-@app.route("/get_import_log")
-def get_import_log():
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"log": ""})
-    # Retourne les 5 dernières lignes seulement pour l'affichage sur l'index
-    logs = user_logs.get(user_id, [])[-5:]
-    return jsonify({"log": "\n".join(logs)})
-# -----------------------------------------
-
-
-
-# --- dictionnaire global pour logs par utilisateur ---
-user_logs = {}  # clé = USER_ID, valeur = liste de lignes
-
-# --- fonction pour ajouter un log pour un utilisateur ---
-def add_user_log(user_id, message):
-    if user_id not in user_logs:
-        user_logs[user_id] = []
-    user_logs[user_id].append(message)
-    # garder uniquement les 100 dernières lignes
-    user_logs[user_id] = user_logs[user_id][-100:]
-
-# --- fonction write_log modifiée ---
+# --- write_log ---
 def write_log(msg):
-    print(msg)
-    add_user_log(USER_ID, msg)  # ajoute le log pour cet utilisateur
+    add_user_log(USER_ID, msg)
     try:
         with open(LOG_FILE, 'a', encoding='utf-8') as f:
             f.write(msg + "\n")
@@ -70,12 +36,12 @@ def write_log(msg):
 
 # --- Vérification argument CSV ---
 if len(sys.argv) < 2:
-    logging.error("Usage: python evend_publish.py <csv_file>")
+    write_log("Usage: python evend_publish.py <csv_file>")
     sys.exit(1)
 
 csv_file = sys.argv[1]
 if not os.path.exists(csv_file):
-    logging.error(f"Fichier CSV introuvable: {csv_file}")
+    write_log(f"Fichier CSV introuvable: {csv_file}")
     sys.exit(1)
 
 # --- Variables d'environnement ---
@@ -88,18 +54,18 @@ FRAIS_PORT_SUP = float(os.environ.get("frais_port_sup", "0"))
 USER_ID = os.environ.get("user_id", f"user_{os.getpid()}")
 
 if not EVEND_EMAIL or not EVEND_PASSWORD:
-    logging.error("❌ Email ou mot de passe e-Vend manquant.")
+    write_log("❌ Email ou mot de passe e-Vend manquant.")
     sys.exit(1)
 
 # --- Lecture CSV ---
 try:
     df = pd.read_csv(csv_file)
 except Exception as e:
-    logging.error(f"❌ Impossible de lire le CSV: {e}")
+    write_log(f"❌ Impossible de lire le CSV: {e}")
     sys.exit(1)
 
 if df.empty:
-    logging.error("Le CSV est vide.")
+    write_log("Le CSV est vide.")
     sys.exit(1)
 
 # --- Gestion file d'attente ---
@@ -137,8 +103,8 @@ position = next(i for i, u in enumerate(queue) if u['id'] == USER_ID)
 if position > 0:
     articles_before = sum(u['articles'] for u in queue[:position])
     est_time = articles_before * 3  # estimation simple : 3s par article
-    logging.error(f"⚠️ Système surchargé. Vous êtes en position #{position+1} dans la file d'attente. "
-                  f"Temps estimé avant votre tour : ~{est_time} sec.")
+    write_log(f"⚠️ Système surchargé. Vous êtes en position #{position+1} dans la file d'attente. "
+              f"Temps estimé avant votre tour : ~{est_time} sec.")
     sys.exit(1)
 
 # --- Fonction cleanup ---
@@ -167,6 +133,7 @@ EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-0
 LOG_FILE = f"/app/uploads/{USER_ID}_import_log.txt"
 PROGRESS_FILE = f"/app/uploads/progress_{USER_ID}.txt"
 
+# --- Sauvegarde et lecture progression ---
 def save_progress(batch_index, idx):
     try:
         with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
@@ -186,7 +153,6 @@ def load_progress():
             pass
     return 0, -1
 
-# --- Charger état ---
 last_batch, last_idx = load_progress()
 
 # --- Fonctions auxiliaires ---
@@ -322,20 +288,14 @@ for batch_index, batch in enumerate(batches):
 
             except Exception as e:
                 write_log(f"❌ Erreur article {idx+1} lot {batch_index+1}: {e}")
-                continue
 
         write_log(f"--- FIN lot {batch_index+1}/{len(batches)} ---")
-        time.sleep(3)
+
+    except Exception as e:
+        write_log(f"❌ Erreur lot {batch_index+1}: {e}")
 
     finally:
-        if driver:
-            try:
-                driver.quit()
-            except:
-                pass
-
-leave_queue(USER_ID)
-write_log("🎯 Toutes les publications terminées.")
+        cleanup_and_exit(driver)
 
 
 
