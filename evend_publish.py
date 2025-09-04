@@ -165,6 +165,7 @@ def upload_images(driver, image_urls):
                         tmp_path = tmp_file.name
                     field.send_keys(tmp_path)
                     write_log(f"📸 Image uploadée: {url}")
+                    os.remove(tmp_path)  # Supprime le fichier temporaire après upload
                 else:
                     write_log(f"⚠️ Impossible de télécharger {url}, code {response.status_code}")
             except Exception as e:
@@ -275,6 +276,7 @@ for batch_index, batch in enumerate(batches):
 driver.quit()
 release_lock()
 write_log("🎯 Toutes les publications terminées.")
+
 
 
 
