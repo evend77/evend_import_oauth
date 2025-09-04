@@ -18,6 +18,27 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 LOCK_FILE = "/tmp/evend_publish.lock"
 QUEUE_FILE = "/tmp/evend_publish_queue.json"
 
+# --- dictionnaire global pour logs par utilisateur ---
+user_logs = {}  # clé = USER_ID, valeur = liste de lignes
+
+# --- fonction pour ajouter un log pour un utilisateur ---
+def add_user_log(user_id, message):
+    if user_id not in user_logs:
+        user_logs[user_id] = []
+    user_logs[user_id].append(message)
+    # garder uniquement les 100 dernières lignes
+    user_logs[user_id] = user_logs[user_id][-100:]
+
+# --- fonction write_log modifiée ---
+def write_log(msg):
+    print(msg)
+    add_user_log(USER_ID, msg)  # ajoute le log pour cet utilisateur
+    try:
+        with open(LOG_FILE, 'a', encoding='utf-8') as f:
+            f.write(msg + "\n")
+    except:
+        pass
+
 # --- Vérification argument CSV ---
 if len(sys.argv) < 2:
     logging.error("Usage: python evend_publish.py <csv_file>")
@@ -116,14 +137,6 @@ EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-0
 
 LOG_FILE = f"/app/uploads/{USER_ID}_import_log.txt"
 PROGRESS_FILE = f"/app/uploads/progress_{USER_ID}.txt"
-
-def write_log(msg):
-    print(msg)
-    try:
-        with open(LOG_FILE, 'a', encoding='utf-8') as f:
-            f.write(msg + "\n")
-    except:
-        pass
 
 def save_progress(batch_index, idx):
     try:
