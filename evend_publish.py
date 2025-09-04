@@ -17,17 +17,23 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 # --- Variables d'environnement ---
 USER_ID = os.environ.get("user_id", f"user_{os.getpid()}")
-
-# --- Crée le dossier uploads si nécessaire ---
-UPLOAD_FOLDER = "/tmp/uploads"
+UPLOAD_FOLDER = "/app/uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
 LOG_FILE = os.path.join(UPLOAD_FOLDER, f"{USER_ID}_import_log.txt")
-QUEUE_FILE = os.path.join(UPLOAD_FOLDER, "evend_publish_queue.json")
 SESSION_FILE = os.path.join(UPLOAD_FOLDER, f"session_{USER_ID}.json")
-PROGRESS_FILE = os.path.join(UPLOAD_FOLDER, f"progress_{USER_ID}.txt")
+QUEUE_FILE = os.path.join(UPLOAD_FOLDER, "evend_publish_queue.json")
 
-# --- Fonction write_log modifiée pour flush immédiat ---
+# --- Variables e-Vend ---
+EVEND_EMAIL = os.environ.get("email")
+EVEND_PASSWORD = os.environ.get("password")
+LIVRAISON_RAMASSAGE_CHECK = os.environ.get("livraison_ramassage_check") == 'on'
+LIVRAISON_RAMASSAGE = os.environ.get("livraison_ramassage", "")
+FRAIS_PORT_ARTICLE = float(os.environ.get("frais_port_article", "0"))
+FRAIS_PORT_SUP = float(os.environ.get("frais_port_sup", "0"))
+
+SESSION_MAX_AGE = 24 * 3600  # 24 heures
+
+# --- Fonction write_log ---
 def write_log(msg):
     print(msg, flush=True)
     try:
@@ -37,7 +43,7 @@ def write_log(msg):
     except Exception as e:
         print(f"⚠️ Impossible d'écrire dans le fichier de log: {e}", flush=True)
 
-# --- Vérification argument CSV ---
+# --- Vérification CSV ---
 if len(sys.argv) < 2:
     logging.error("Usage: python evend_publish.py <csv_file>")
     sys.exit(1)
@@ -46,14 +52,6 @@ csv_file = sys.argv[1]
 if not os.path.exists(csv_file):
     logging.error(f"Fichier CSV introuvable: {csv_file}")
     sys.exit(1)
-
-# --- Variables d'environnement pour e-Vend ---
-EVEND_EMAIL = os.environ.get("email")
-EVEND_PASSWORD = os.environ.get("password")
-LIVRAISON_RAMASSAGE_CHECK = os.environ.get("livraison_ramassage_check") == 'on'
-LIVRAISON_RAMASSAGE = os.environ.get("livraison_ramassage", "")
-FRAIS_PORT_ARTICLE = float(os.environ.get("frais_port_article", "0"))
-FRAIS_PORT_SUP = float(os.environ.get("frais_port_sup", "0"))
 
 if not EVEND_EMAIL or not EVEND_PASSWORD:
     logging.error("❌ Email ou mot de passe e-Vend manquant.")
@@ -112,7 +110,7 @@ if position > 0:
     write_log(msg)
     sys.exit(1)
 
-# --- Fonction cleanup ---
+# --- Cleanup ---
 def cleanup_and_exit(driver=None):
     if driver:
         try:
@@ -121,7 +119,7 @@ def cleanup_and_exit(driver=None):
             pass
     leave_queue(USER_ID)
 
-# --- Setup Selenium ---
+# --- Selenium driver ---
 def get_driver():
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
@@ -134,8 +132,9 @@ def get_driver():
 
 EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
 EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
+PROGRESS_FILE = os.path.join(UPLOAD_FOLDER, f"progress_{USER_ID}.txt")
 
-# --- Gestion progression ---
+# --- Progress ---
 def save_progress(batch_index, idx):
     try:
         with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
@@ -157,12 +156,13 @@ def load_progress():
 
 last_batch, last_idx = load_progress()
 
-# --- Gestion session e-Vend ---
+# --- Session management ---
 def save_session(driver):
     try:
         cookies = driver.get_cookies()
+        session_data = {"timestamp": time.time(), "cookies": cookies}
         with open(SESSION_FILE, "w", encoding="utf-8") as f:
-            json.dump(cookies, f)
+            json.dump(session_data, f)
     except Exception as e:
         write_log(f"⚠️ Impossible de sauvegarder la session: {e}")
 
@@ -170,9 +170,13 @@ def load_session(driver):
     if os.path.exists(SESSION_FILE):
         try:
             with open(SESSION_FILE, "r", encoding="utf-8") as f:
-                cookies = json.load(f)
+                session_data = json.load(f)
+            if time.time() - session_data.get("timestamp", 0) > SESSION_MAX_AGE:
+                write_log("⚠️ Session expirée, suppression du fichier de session.")
+                os.remove(SESSION_FILE)
+                return False
             driver.get(EVEND_LOGIN_URL)
-            for cookie in cookies:
+            for cookie in session_data.get("cookies", []):
                 if 'sameSite' in cookie:
                     del cookie['sameSite']
                 driver.add_cookie(cookie)
@@ -181,15 +185,14 @@ def load_session(driver):
             write_log(f"⚠️ Impossible de charger la session: {e}")
     return False
 
+# --- Login ---
 def login(driver, wait):
-    driver.get(EVEND_LOGIN_URL)
     if load_session(driver):
-        driver.refresh()
+        write_log("✅ Session existante chargée.")
+        driver.get(EVEND_LOGIN_URL)
         wait.until(EC.presence_of_element_located((By.ID, "dashboard")))
-        write_log("✅ Connexion e-Vend restaurée depuis session.")
         return
-
-    # Si pas de session valide, login normal
+    driver.get(EVEND_LOGIN_URL)
     wait.until(EC.presence_of_element_located((By.ID, "email")))
     driver.find_element(By.ID, "email").send_keys(EVEND_EMAIL)
     driver.find_element(By.ID, "password").send_keys(EVEND_PASSWORD)
@@ -198,7 +201,7 @@ def login(driver, wait):
     write_log("✅ Connecté à e-Vend avec succès.")
     save_session(driver)
 
-# --- Fonctions utilitaires ---
+# --- Helpers ---
 def check_radio(driver, name, value_to_check):
     try:
         radios = driver.find_elements(By.NAME, name)
@@ -244,7 +247,7 @@ def wait_for_success_message(wait):
     except TimeoutException:
         return False
 
-# --- Batching ---
+# --- Main processing ---
 BATCH_SIZE = 20
 batches = [df[i:i+BATCH_SIZE] for i in range(0, len(df), BATCH_SIZE)]
 
@@ -296,7 +299,6 @@ for batch_index, batch in enumerate(batches):
                 image_urls = [row.get('photo_defaut')] if row.get('photo_defaut') else []
                 upload_images(driver, image_urls)
 
-                # submit
                 try:
                     driver.find_element(By.ID, "submitBtn").click()
                     if wait_for_success_message(wait):
