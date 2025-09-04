@@ -4,6 +4,7 @@ import pandas as pd
 import requests
 import tempfile
 import time
+import logging
 import json
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -12,48 +13,45 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
-# --- Lock et queue ---
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 LOCK_FILE = "/tmp/evend_publish.lock"
 QUEUE_FILE = "/tmp/evend_publish_queue.json"
 
-# --- Logs par utilisateur ---
-user_logs = {}  # clé = USER_ID, valeur = liste de lignes
-def add_user_log(user_id, message):
-    if user_id not in user_logs:
-        user_logs[user_id] = []
-    user_logs[user_id].append(message)
-    if len(user_logs[user_id]) > 100:
-        user_logs[user_id] = user_logs[user_id][-100:]
+# --- Variables d'environnement ---
+USER_ID = os.environ.get("user_id", f"user_{os.getpid()}")
+LOG_FILE = f"/app/uploads/{USER_ID}_import_log.txt"
 
-# --- write_log ---
+# --- Fonction write_log modifiée pour gestion utilisateur ---
 def write_log(msg):
-    add_user_log(USER_ID, msg)
+    print(msg)
+    # Ajoute au fichier de log dédié à cet utilisateur
     try:
         with open(LOG_FILE, 'a', encoding='utf-8') as f:
             f.write(msg + "\n")
-    except:
-        pass
+    except Exception as e:
+        print(f"⚠️ Impossible d'écrire dans le fichier de log: {e}")
 
 # --- Vérification argument CSV ---
 if len(sys.argv) < 2:
-    write_log("Usage: python evend_publish.py <csv_file>")
+    logging.error("Usage: python evend_publish.py <csv_file>")
     sys.exit(1)
 
 csv_file = sys.argv[1]
 if not os.path.exists(csv_file):
-    write_log(f"Fichier CSV introuvable: {csv_file}")
+    logging.error(f"Fichier CSV introuvable: {csv_file}")
     sys.exit(1)
 
-# --- Variables d'environnement ---
+# --- Variables d'environnement pour e-Vend ---
 EVEND_EMAIL = os.environ.get("email")
 EVEND_PASSWORD = os.environ.get("password")
 LIVRAISON_RAMASSAGE_CHECK = os.environ.get("livraison_ramassage_check") == 'on'
 LIVRAISON_RAMASSAGE = os.environ.get("livraison_ramassage", "")
 FRAIS_PORT_ARTICLE = float(os.environ.get("frais_port_article", "0"))
 FRAIS_PORT_SUP = float(os.environ.get("frais_port_sup", "0"))
-USER_ID = os.environ.get("user_id", f"user_{os.getpid()}")
 
 if not EVEND_EMAIL or not EVEND_PASSWORD:
+    logging.error("❌ Email ou mot de passe e-Vend manquant.")
     write_log("❌ Email ou mot de passe e-Vend manquant.")
     sys.exit(1)
 
@@ -61,10 +59,12 @@ if not EVEND_EMAIL or not EVEND_PASSWORD:
 try:
     df = pd.read_csv(csv_file)
 except Exception as e:
+    logging.error(f"❌ Impossible de lire le CSV: {e}")
     write_log(f"❌ Impossible de lire le CSV: {e}")
     sys.exit(1)
 
 if df.empty:
+    logging.error("Le CSV est vide.")
     write_log("Le CSV est vide.")
     sys.exit(1)
 
@@ -97,14 +97,14 @@ def leave_queue(user_id):
     queue = [u for u in queue if u['id'] != user_id]
     save_queue(queue)
 
-# --- Ajouter utilisateur à la queue ---
 queue = enter_queue(USER_ID, len(df))
-position = next(i for i, u in enumerate(queue) if u['id'] == USER_ID)
+position = next((i for i, u in enumerate(queue) if u['id'] == USER_ID), 0)
 if position > 0:
     articles_before = sum(u['articles'] for u in queue[:position])
-    est_time = articles_before * 3  # estimation simple : 3s par article
-    write_log(f"⚠️ Système surchargé. Vous êtes en position #{position+1} dans la file d'attente. "
-              f"Temps estimé avant votre tour : ~{est_time} sec.")
+    est_time = articles_before * 3
+    msg = f"⚠️ Système surchargé. Vous êtes en position #{position+1} dans la file d'attente. Temps estimé avant votre tour : ~{est_time} sec."
+    logging.error(msg)
+    write_log(msg)
     sys.exit(1)
 
 # --- Fonction cleanup ---
@@ -130,10 +130,8 @@ def get_driver():
 EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
 EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
 
-LOG_FILE = f"/app/uploads/{USER_ID}_import_log.txt"
 PROGRESS_FILE = f"/app/uploads/progress_{USER_ID}.txt"
 
-# --- Sauvegarde et lecture progression ---
 def save_progress(batch_index, idx):
     try:
         with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
@@ -155,7 +153,6 @@ def load_progress():
 
 last_batch, last_idx = load_progress()
 
-# --- Fonctions auxiliaires ---
 def login(driver, wait):
     driver.get(EVEND_LOGIN_URL)
     wait.until(EC.presence_of_element_located((By.ID, "email")))
@@ -210,11 +207,9 @@ def wait_for_success_message(wait):
     except TimeoutException:
         return False
 
-# --- Diviser en lots ---
 BATCH_SIZE = 20
 batches = [df[i:i+BATCH_SIZE] for i in range(0, len(df), BATCH_SIZE)]
 
-# --- Boucle principale ---
 for batch_index, batch in enumerate(batches):
     if batch_index < last_batch:
         continue
@@ -224,7 +219,6 @@ for batch_index, batch in enumerate(batches):
         driver = get_driver()
         wait = WebDriverWait(driver, 20)
         login(driver, wait)
-
         write_log(f"--- DÉBUT lot {batch_index+1}/{len(batches)} ---")
 
         for idx, row in batch.iterrows():
@@ -253,41 +247,31 @@ for batch_index, batch in enumerate(batches):
                 for field_id, value in fields.items():
                     try:
                         el = driver.find_element(By.ID, field_id)
-                        if field_id in ["prix", "stock", "frais_port_article", "frais_port_sup"]:
-                            el.clear()
+                        el.clear()
                         el.send_keys(value)
-                    except NoSuchElementException:
-                        write_log(f"⚠️ Champ '{field_id}' non trouvé.")
+                    except:
+                        pass
 
-                check_radio(driver, "livraison_type", "Expédition")
                 if LIVRAISON_RAMASSAGE_CHECK:
-                    try:
-                        ramassage_field = driver.find_element(By.ID, "livraison_ramassage")
-                        ramassage_field.clear()
-                        ramassage_field.send_keys(LIVRAISON_RAMASSAGE)
-                    except NoSuchElementException:
-                        write_log("⚠️ Champ livraison ramassage non trouvé.")
+                    check_radio(driver, "livraison", "ramassage")
 
-                image_urls = []
-                if 'photo_defaut' in row and pd.notna(row['photo_defaut']):
-                    image_urls = [img.strip() for img in str(row['photo_defaut']).replace(';', ',').split(',') if img.strip()]
-                if image_urls:
-                    upload_images(driver, image_urls)
+                image_urls = [row.get('photo_defaut')] if row.get('photo_defaut') else []
+                upload_images(driver, image_urls)
 
+                # submit
                 try:
                     driver.find_element(By.ID, "submitBtn").click()
                     if wait_for_success_message(wait):
-                        write_log(f"✅ Article publié: {titre}")
+                        write_log("✅ Article publié avec succès.")
                     else:
-                        write_log(f"⚠️ Pas de confirmation publication pour: {titre}")
-                except Exception as e:
-                    write_log(f"❌ Impossible de soumettre l'article {titre}: {e}")
+                        write_log("⚠️ Article publié mais confirmation non détectée.")
+                except:
+                    write_log("❌ Impossible de soumettre l'article.")
 
                 save_progress(batch_index, idx)
-                time.sleep(2)
 
             except Exception as e:
-                write_log(f"❌ Erreur article {idx+1} lot {batch_index+1}: {e}")
+                write_log(f"❌ Erreur article {idx+1}: {e}")
 
         write_log(f"--- FIN lot {batch_index+1}/{len(batches)} ---")
 
@@ -296,6 +280,9 @@ for batch_index, batch in enumerate(batches):
 
     finally:
         cleanup_and_exit(driver)
+
+write_log("🎉 Tous les articles ont été traités.")
+cleanup_and_exit()
 
 
 
