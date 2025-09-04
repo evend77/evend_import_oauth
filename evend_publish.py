@@ -1,11 +1,11 @@
 import os
 import sys
+import gc
 import pandas as pd
 import requests
 import tempfile
 import time
 import logging
-import socket
 import json
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -16,7 +16,6 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-LOCK_FILE = "/tmp/evend_publish.lock"
 QUEUE_FILE = "/tmp/evend_publish_queue.json"
 
 # --- Vérification argument CSV ---
@@ -87,14 +86,23 @@ def leave_queue(user_id):
 queue = enter_queue(USER_ID, len(df))
 position = next(i for i, u in enumerate(queue) if u['id'] == USER_ID)
 if position > 0:
-    # Estimation du temps : 3s par article * articles avant
     articles_before = sum(u['articles'] for u in queue[:position])
     est_time = articles_before * 3
     logging.error(f"⚠️ Système surchargé. Vous êtes en position #{position+1} dans la file d'attente. "
                   f"Temps estimé avant votre tour : ~{est_time} sec.")
     sys.exit(1)
 
-# --- Fonction pour libérer lock et quitter proprement ---
+# --- Fonctions Selenium ---
+def create_driver():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    prefs = {"profile.managed_default_content_settings.images": 2}
+    chrome_options.add_experimental_option("prefs", prefs)
+    return webdriver.Chrome(options=chrome_options)
+
 def cleanup_and_exit(driver=None):
     if driver:
         try:
@@ -103,16 +111,8 @@ def cleanup_and_exit(driver=None):
             pass
     leave_queue(USER_ID)
 
-# --- Setup Selenium Chrome Headless ---
-chrome_options = Options()
-chrome_options.add_argument("--headless=new")
-chrome_options.add_argument("--no-sandbox")
-chrome_options.add_argument("--disable-dev-shm-usage")
-chrome_options.add_argument("--disable-gpu")
-prefs = {"profile.managed_default_content_settings.images": 2}
-chrome_options.add_experimental_option("prefs", prefs)
-
-driver = webdriver.Chrome(options=chrome_options)
+# --- Setup Selenium ---
+driver = create_driver()
 wait = WebDriverWait(driver, 20)
 
 EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
@@ -185,8 +185,9 @@ def upload_images(driver, image_urls):
                 write_log(f"⚠️ Pas assez de champs photo pour l'image {url}")
                 break
             field = photo_fields[i]
+            tmp_path = None
             try:
-                response = requests.get(url, timeout=10)
+                response = requests.get(url, timeout=5)  # Timeout réduit
                 if response.status_code == 200:
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
                         tmp_file.write(response.content)
@@ -197,6 +198,12 @@ def upload_images(driver, image_urls):
                     write_log(f"⚠️ Impossible de télécharger {url}, code {response.status_code}")
             except Exception as e:
                 write_log(f"⚠️ Erreur téléchargement image {url}: {e}")
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)  # Nettoyage fichier temporaire
+                    except:
+                        pass
     except Exception as e:
         write_log(f"⚠️ Impossible d’uploader les images: {e}")
 
@@ -215,6 +222,7 @@ for batch_index, batch in enumerate(batches):
     if batch_index < last_batch:
         continue
     write_log(f"--- DÉBUT lot {batch_index+1}/{len(batches)} ---")
+
     for idx, row in batch.iterrows():
         if batch_index == last_batch and idx <= last_idx:
             continue
@@ -297,6 +305,29 @@ for batch_index, batch in enumerate(batches):
             continue
 
     write_log(f"--- FIN lot {batch_index+1}/{len(batches)} ---")
+
+    # --- Optimisation mémoire ---
+    gc.collect()  # Forcer libération mémoire
+    if (batch_index + 1) % 2 == 0:  # Restart Chrome tous les 2 lots
+        try:
+            driver.quit()
+        except:
+            pass
+        driver = create_driver()
+        wait = WebDriverWait(driver, 20)
+        try:
+            driver.get(EVEND_LOGIN_URL)
+            wait.until(EC.presence_of_element_located((By.ID, "email")))
+            driver.find_element(By.ID, "email").send_keys(EVEND_EMAIL)
+            driver.find_element(By.ID, "password").send_keys(EVEND_PASSWORD)
+            driver.find_element(By.ID, "loginBtn").click()
+            wait.until(EC.presence_of_element_located((By.ID, "dashboard")))
+            write_log("🔄 Chrome redémarré et reconnecté à e-Vend.")
+        except Exception as e:
+            write_log(f"❌ Échec reconnection après restart: {e}")
+            cleanup_and_exit(driver)
+            sys.exit(1)
+
     time.sleep(3)
 
 cleanup_and_exit(driver)
