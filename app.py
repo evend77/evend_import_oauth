@@ -7,8 +7,29 @@ import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
+# --- Création de l'app Flask ---
 app = Flask(__name__)
 app.secret_key = 'UN_SECRET_POUR_SESSION'  # ⚠️ change-le en prod
+
+# --- LOGS PAR UTILISATEUR ---
+user_logs = {}  # clé = USER_ID, valeur = liste de lignes
+
+def add_user_log(user_id, message):
+    if user_id not in user_logs:
+        user_logs[user_id] = []
+    user_logs[user_id].append(message)
+    # garder seulement les 100 dernières lignes
+    if len(user_logs[user_id]) > 100:
+        user_logs[user_id] = user_logs[user_id][-100:]
+
+@app.route("/get_import_log")
+def get_import_log():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"log": ""})
+    logs = user_logs.get(user_id, [])[-5:]  # 5 dernières lignes
+    return jsonify({"log": "\n".join(logs)})
+
 
 # --- Chemins relatifs pour Render ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
