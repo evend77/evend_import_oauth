@@ -6,6 +6,7 @@ import tempfile
 import time
 import logging
 import socket
+import json
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -16,33 +17,16 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 LOCK_FILE = "/tmp/evend_publish.lock"
-
-# --- Vérification si un import est déjà en cours ---
-if os.path.exists(LOCK_FILE):
-    logging.error("❌ Notre système est actuellement surchargé. Veuillez réessayer plus tard ou attendre votre tour.")
-    sys.exit(1)
-else:
-    with open(LOCK_FILE, "w") as f:
-        f.write(str(os.getpid()))
-
-# --- Fonction pour libérer le lock ---
-def release_lock():
-    try:
-        if os.path.exists(LOCK_FILE):
-            os.remove(LOCK_FILE)
-    except:
-        pass
+QUEUE_FILE = "/tmp/evend_publish_queue.json"
 
 # --- Vérification argument CSV ---
 if len(sys.argv) < 2:
     logging.error("Usage: python evend_publish.py <csv_file>")
-    release_lock()
     sys.exit(1)
 
 csv_file = sys.argv[1]
 if not os.path.exists(csv_file):
     logging.error(f"Fichier CSV introuvable: {csv_file}")
-    release_lock()
     sys.exit(1)
 
 # --- Variables d'environnement ---
@@ -53,11 +37,10 @@ LIVRAISON_EXPEDITION_CHECK = os.environ.get("livraison_expedition_check") == 'on
 LIVRAISON_RAMASSAGE = os.environ.get("livraison_ramassage", "")
 FRAIS_PORT_ARTICLE = float(os.environ.get("frais_port_article", "0"))
 FRAIS_PORT_SUP = float(os.environ.get("frais_port_sup", "0"))
-USER_ID = os.environ.get("user_id", "unknown_user")
+USER_ID = os.environ.get("user_id", f"user_{os.getpid()}")
 
 if not EVEND_EMAIL or not EVEND_PASSWORD:
     logging.error("❌ Email ou mot de passe e-Vend manquant.")
-    release_lock()
     sys.exit(1)
 
 # --- Lecture CSV ---
@@ -65,13 +48,60 @@ try:
     df = pd.read_csv(csv_file)
 except Exception as e:
     logging.error(f"❌ Impossible de lire le CSV: {e}")
-    release_lock()
     sys.exit(1)
 
 if df.empty:
     logging.error("Le CSV est vide.")
-    release_lock()
     sys.exit(1)
+
+# --- Gestion file d'attente ---
+def load_queue():
+    if os.path.exists(QUEUE_FILE):
+        try:
+            with open(QUEUE_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_queue(queue):
+    try:
+        with open(QUEUE_FILE, "w") as f:
+            json.dump(queue, f)
+    except:
+        pass
+
+def enter_queue(user_id, total_articles):
+    queue = load_queue()
+    if user_id not in [u['id'] for u in queue]:
+        queue.append({'id': user_id, 'articles': total_articles})
+        save_queue(queue)
+    return queue
+
+def leave_queue(user_id):
+    queue = load_queue()
+    queue = [u for u in queue if u['id'] != user_id]
+    save_queue(queue)
+
+# --- Ajouter utilisateur à la queue ---
+queue = enter_queue(USER_ID, len(df))
+position = next(i for i, u in enumerate(queue) if u['id'] == USER_ID)
+if position > 0:
+    # Estimation du temps : 3s par article * articles avant
+    articles_before = sum(u['articles'] for u in queue[:position])
+    est_time = articles_before * 3
+    logging.error(f"⚠️ Système surchargé. Vous êtes en position #{position+1} dans la file d'attente. "
+                  f"Temps estimé avant votre tour : ~{est_time} sec.")
+    sys.exit(1)
+
+# --- Fonction pour libérer lock et quitter proprement ---
+def cleanup_and_exit(driver=None):
+    if driver:
+        try:
+            driver.quit()
+        except:
+            pass
+    leave_queue(USER_ID)
 
 # --- Setup Selenium Chrome Headless ---
 chrome_options = Options()
@@ -88,7 +118,6 @@ wait = WebDriverWait(driver, 20)
 EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
 EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
 
-# --- Fichiers de log et progression ---
 LOG_FILE = f"/app/uploads/{USER_ID}_import_log.txt"
 PROGRESS_FILE = f"/app/uploads/progress_{USER_ID}.txt"
 
@@ -119,7 +148,7 @@ def load_progress():
             pass
     return 0, -1
 
-# --- Charger l'état avant de commencer ---
+# --- Charger état ---
 last_batch, last_idx = load_progress()
 
 # --- Login e-Vend ---
@@ -133,8 +162,7 @@ try:
     write_log("✅ Connecté à e-Vend avec succès.")
 except Exception as e:
     write_log(f"❌ Échec du login: {e}")
-    driver.quit()
-    release_lock()
+    cleanup_and_exit(driver)
     sys.exit(1)
 
 # --- Fonctions auxiliaires ---
@@ -165,7 +193,6 @@ def upload_images(driver, image_urls):
                         tmp_path = tmp_file.name
                     field.send_keys(tmp_path)
                     write_log(f"📸 Image uploadée: {url}")
-                    os.remove(tmp_path)  # Supprime le fichier temporaire après upload
                 else:
                     write_log(f"⚠️ Impossible de télécharger {url}, code {response.status_code}")
             except Exception as e:
@@ -257,7 +284,6 @@ for batch_index, batch in enumerate(batches):
             except Exception as e:
                 write_log(f"❌ Impossible de soumettre l'article {titre}: {e}")
 
-            # --- Keep-alive pour Render gratuit ---
             try:
                 requests.get("https://evend-import-oauth.onrender.com/")
             except:
@@ -273,8 +299,7 @@ for batch_index, batch in enumerate(batches):
     write_log(f"--- FIN lot {batch_index+1}/{len(batches)} ---")
     time.sleep(3)
 
-driver.quit()
-release_lock()
+cleanup_and_exit(driver)
 write_log("🎯 Toutes les publications terminées.")
 
 
