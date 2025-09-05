@@ -10,21 +10,23 @@ from selenium.webdriver.chrome.options import Options
 # --- Nettoyage uploads avant lancement (safe) ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-if os.path.exists(UPLOAD_FOLDER):
-    for f in os.listdir(UPLOAD_FOLDER):
-        file_path = os.path.join(UPLOAD_FOLDER, f)
-        try:
-            if os.path.isfile(file_path):
-                os.remove(file_path)
-                print(f"🧹 Supprimé: {f}")
-            # Si tu veux aussi supprimer d’éventuels dossiers vides:
-            elif os.path.isdir(file_path):
-                import shutil
-                shutil.rmtree(file_path)
-                print(f"🧹 Dossier supprimé: {f}")
-        except Exception as e:
-            print(f"❌ Impossible de supprimer {f}: {e}")
+for f in os.listdir(UPLOAD_FOLDER):
+    file_path = os.path.join(UPLOAD_FOLDER, f)
+    try:
+        # Supprimer uniquement les CSV temporaires
+        if os.path.isfile(file_path) and f.endswith(".csv"):
+            os.remove(file_path)
+            print(f"🧹 CSV supprimé: {f}")
+        # Si tu as des dossiers temporaires à nettoyer, tu peux les gérer ici
+        # elif os.path.isdir(file_path):
+        #     import shutil
+        #     shutil.rmtree(file_path)
+        #     print(f"🧹 Dossier supprimé: {f}")
+    except Exception as e:
+        print(f"❌ Impossible de supprimer {f}: {e}")
+
 else:
     os.makedirs(UPLOAD_FOLDER)
 
