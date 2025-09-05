@@ -27,8 +27,6 @@ for f in os.listdir(UPLOAD_FOLDER):
     except Exception as e:
         print(f"❌ Impossible de supprimer {f}: {e}")
 
-else:
-    os.makedirs(UPLOAD_FOLDER)
 
 
 
