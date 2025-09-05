@@ -94,40 +94,26 @@ refreshAllLogs(); // premier affichage
 {% endif %}
 {% endwith %}
 
-<!-- Script pour rafraîchir les logs quasi temps réel -->
+<!-- Script pour rafraîchir le log complet quasi temps réel -->
 <script>
-function refreshAllLogs() {
+function refreshRenderLog() {
     fetch("/get_import_log")
         .then(response => response.json())
         .then(data => {
-            // Messages UL
-            const messagesUl = document.getElementById('import-log');
-            if (messagesUl) {
-                messagesUl.innerHTML = '';
-                data.log.split('\n').forEach(line => {
-                    if (line.trim() !== '') {
-                        const li = document.createElement('li');
-                        li.textContent = line;
-                        messagesUl.appendChild(li);
-                    }
-                });
-                messagesUl.scrollTop = messagesUl.scrollHeight;
-            }
-
-            // Render log
             const logDiv = document.getElementById('render-log');
             if (logDiv) {
                 logDiv.textContent = data.log || "🔄 Aucun log disponible pour le moment...";
-                logDiv.scrollTop = logDiv.scrollHeight;
+                logDiv.scrollTop = logDiv.scrollHeight; // scrolle automatiquement vers le bas
             }
         })
         .catch(err => console.error("Erreur récupération logs:", err));
 }
 
 // Rafraîchir toutes les 3 secondes
-setInterval(refreshAllLogs, 3000);
-refreshAllLogs(); // premier affichage
+setInterval(refreshRenderLog, 3000);
+refreshRenderLog(); // premier affichage
 </script>
+
 
 
 
