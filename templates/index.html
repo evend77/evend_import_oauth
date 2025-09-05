@@ -37,14 +37,35 @@
                 ✅ Vous êtes connecté à eBay !
             </div>
         {% endif %}
+<!-- UL pour afficher les étapes en cours et les erreurs -->
+<div class="alert alert-info-custom mb-3">
+    <h5 class="fw-bold text-center mb-2">📌 Étapes en cours :</h5>
+    <ul id="import-steps" style="max-height: 5.5em; overflow-y: auto; padding-left: 20px; margin: 0;">
+        <!-- Les étapes et erreurs apparaîtront ici via JS -->
+    </ul>
+</div>
 
-        <!-- UL pour afficher les étapes en cours et les erreurs -->
-        <div class="alert alert-info-custom mb-3">
-            <h5 class="fw-bold text-center mb-2">📌 Étapes en cours :</h5>
-            <ul id="import-steps" style="max-height: 150px; overflow-y: auto; padding-left: 20px;">
-                <!-- Les étapes et erreurs apparaîtront ici via JS -->
-            </ul>
-        </div>
+<script>
+// Fonction pour ajouter une étape ou une erreur
+function addStep(message, isError = false) {
+    const stepsUl = document.getElementById('import-steps');
+    if (!stepsUl) return;
+
+    const li = document.createElement('li');
+    li.textContent = message;
+    if (isError) li.style.color = 'red'; // les erreurs en rouge
+    stepsUl.appendChild(li);
+
+    // Scroll automatique pour toujours voir la dernière étape
+    stepsUl.scrollTop = stepsUl.scrollHeight;
+
+    // Limiter à 5 lignes visibles en retirant les plus anciennes
+    while (stepsUl.children.length > 10) { // garder max 10 pour buffer
+        stepsUl.removeChild(stepsUl.firstChild);
+    }
+}
+</script>
+
 
         <!-- UL pour les messages flash normaux -->
         <ul id="import-log" style="max-height: 200px; overflow-y: auto; padding-left: 20px; margin-top: 10px;">
