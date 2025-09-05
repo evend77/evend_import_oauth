@@ -51,6 +51,30 @@ def add_user_log_file(user_id, message):
     except Exception as e:
         print(f"❌ Impossible d'écrire dans le log {log_file}: {e}")
 
+# --- Nouvelle route pour lire les logs ---
+@app.route('/get_import_log')
+def get_import_log():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"log": "⚠️ Session expirée ou utilisateur non identifié."})
+
+    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
+    if not os.path.exists(log_file):
+        open(log_file, 'a').close()
+        return jsonify({"log": "ℹ️ Log créé, en attente d’événements..."})
+
+    try:
+        with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+            f.seek(0, 2)  # aller à la fin
+            size = f.tell()
+            f.seek(max(size - 5000, 0))  # lire seulement les 5000 derniers caractères
+            logs = f.read()
+    except Exception as e:
+        logs = f"❌ Impossible de lire le fichier de log: {e}"
+
+    return jsonify({"log": logs})
+
+
 # --- Vérification au lancement ---
 try:
     test_user = "startup_check"
@@ -62,29 +86,6 @@ except Exception as e:
 
 
 
-# --- Nouvelle route pour lire les logs ---
-@app.route('/get_import_log')
-def get_import_log():
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({"log": "⚠️ Session expirée ou utilisateur non identifié."})
-
-    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
-    if not os.path.exists(log_file):
-        # Crée un fichier vide pour éviter que la route retourne toujours "aucun log"
-        open(log_file, 'a').close()
-        return jsonify({"log": "ℹ️ Log créé, en attente d’événements..."})
-
-    try:
-        with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
-            f.seek(0, 2)  # fin
-            size = f.tell()
-            f.seek(max(size - 5000, 0))
-            logs = f.read()
-    except Exception as e:
-        logs = f"❌ Impossible de lire le fichier de log: {e}"
-
-    return jsonify({"log": logs})
 
 # --- Lancement Selenium corrigé ---
 def launch_selenium_import(user_id, file_path, env_vars):
