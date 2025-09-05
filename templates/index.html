@@ -23,26 +23,50 @@
             ⚠️ Veuillez vous connecter à votre compte e-Vend avant de lancer la procédure.
         </div>
 
-        <!-- Bloc regroupé messages + connecté eBay -->
-        {% with messages = get_flashed_messages() %}
-        {% if messages or connected %}
-            <div class="alert-info-custom">
-                {% if messages %}
-                    <h5 class="fw-bold text-center mb-3">Messages</h5>
-                {% endif %}
-                {% if connected %}
-                    <div class="alert-success-custom text-center fw-bold">
-                        ✅ Vous êtes connecté à eBay !
-                    </div>
-                {% endif %}
-                <!-- UL pour les logs live -->
-                <ul id="import-log" style="max-height: 200px; overflow-y: auto; padding-left: 20px; margin-top: 10px;">
-                    {% if messages %}
-                        {% for message in messages %}
-                            <li>{{ message }}</li>
-                        {% endfor %}
-                    {% endif %}
-                </ul>
+       <!-- Bloc regroupé messages + connecté eBay -->
+{% with messages = get_flashed_messages() %}
+{% if messages or connected %}
+    <div class="alert-info-custom">
+
+        {% if messages %}
+            <h5 class="fw-bold text-center mb-3">Messages</h5>
+        {% endif %}
+
+        {% if connected %}
+            <div class="alert-success-custom text-center fw-bold">
+                ✅ Vous êtes connecté à eBay !
+            </div>
+        {% endif %}
+
+        <!-- UL pour afficher les étapes en cours et les erreurs -->
+        <div class="alert alert-info-custom mb-3">
+            <h5 class="fw-bold text-center mb-2">📌 Étapes en cours :</h5>
+            <ul id="import-steps" style="max-height: 150px; overflow-y: auto; padding-left: 20px;">
+                <!-- Les étapes et erreurs apparaîtront ici via JS -->
+            </ul>
+        </div>
+
+        <!-- UL pour les messages flash normaux -->
+        <ul id="import-log" style="max-height: 200px; overflow-y: auto; padding-left: 20px; margin-top: 10px;">
+            {% if messages %}
+                {% for message in messages %}
+                    <li>{{ message }}</li>
+                {% endfor %}
+            {% endif %}
+        </ul>
+
+        <!-- Bloc logs Render pour cet utilisateur -->
+        <div class="alert alert-info-custom mt-3">
+            <h5 class="fw-bold text-center mb-2">LOG import :</h5>
+            <div id="render-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
+                🔄 Les logs d'import s'afficheront ici...
+            </div>
+        </div>
+
+    </div>
+{% endif %}
+{% endwith %}
+
 
                 <!-- Bloc logs Render pour cet utilisateur -->
                 <div class="alert alert-info-custom mt-3">
