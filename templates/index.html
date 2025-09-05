@@ -75,13 +75,48 @@
         {% endif %}
     </ul>
 
-    <!-- Log complet -->
-    <div class="alert alert-info-custom mt-3">
-        <h5 class="fw-bold text-center mb-2">LOG import :</h5>
-        <div id="render-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
-            🔄 Les logs d'import s'afficheront ici...
-        </div>
+<!-- Log complet -->
+<div class="alert alert-info-custom mt-3">
+    <h5 class="fw-bold text-center mb-2">LOG import :</h5>
+    <div id="render-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
+        🔄 Les logs d'import s'afficheront ici...
     </div>
+</div>
+
+<!-- Script pour rafraîchir les logs quasi temps réel -->
+<script>
+function refreshAllLogs() {
+    fetch("/get_import_log")
+        .then(response => response.json())
+        .then(data => {
+            // Messages UL
+            const messagesUl = document.getElementById('import-log');
+            if (messagesUl) {
+                messagesUl.innerHTML = '';
+                data.log.split('\n').forEach(line => {
+                    if (line.trim() !== '') {
+                        const li = document.createElement('li');
+                        li.textContent = line;
+                        messagesUl.appendChild(li);
+                    }
+                });
+                messagesUl.scrollTop = messagesUl.scrollHeight;
+            }
+
+            // Render log complet
+            const logDiv = document.getElementById('render-log');
+            if (logDiv) {
+                logDiv.textContent = data.log || "🔄 Aucun log disponible pour le moment...";
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+        })
+        .catch(err => console.error("Erreur récupération logs:", err));
+}
+
+// Rafraîchir toutes les 3 secondes
+setInterval(refreshAllLogs, 3000);
+refreshAllLogs(); // premier affichage
+</script>
 
 </div>
 {% endif %}
