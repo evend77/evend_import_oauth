@@ -471,7 +471,6 @@ def post_evend():
         set_last_csv_path(user_id, file_path)
         add_user_log_file(user_id, f"📂 Fichier {file.filename} reçu et sauvegardé sous {safe_filename}")
     else:
-        # Aucun fichier uploadé → utiliser le dernier CSV connu
         file_path = get_last_csv_path(user_id)
         if not file_path or not os.path.exists(file_path):
             flash("⚠️ Aucun fichier CSV disponible pour l'import.")
@@ -498,11 +497,20 @@ def post_evend():
 
     # --- Préparer les variables d'environnement pour Selenium ---
     env_vars = os.environ.copy()
-    for key in ["email", "password", "type_annonce", "categorie", "titre", "description", 
-                "condition", "retour", "garantie", "prix", "stock", 
-                "frais_port_article", "frais_port_sup", "photo_defaut"]:
-        env_vars[key] = request.form.get(key, "")
-
+    env_vars["email"] = request.form.get("evend_email", "")
+    env_vars["password"] = request.form.get("evend_password", "")
+    env_vars["type_annonce"] = request.form.get("type_annonce", "")
+    env_vars["categorie"] = request.form.get("categorie", "")
+    env_vars["titre"] = request.form.get("titre", "")
+    env_vars["description"] = request.form.get("description", "")
+    env_vars["condition"] = request.form.get("condition", "")
+    env_vars["retour"] = request.form.get("retour", "")
+    env_vars["garantie"] = request.form.get("garantie", "")
+    env_vars["prix"] = request.form.get("prix", "")
+    env_vars["stock"] = request.form.get("stock", "")
+    env_vars["frais_port_article"] = request.form.get("frais_port_article", "")
+    env_vars["frais_port_sup"] = request.form.get("frais_port_sup", "")
+    env_vars["photo_defaut"] = request.form.get("photo_defaut", "")
     env_vars["livraison_ramassage_check"] = "on" if request.form.get("livraison_ramassage_check") else ""
     env_vars["livraison_expedition_check"] = "on" if request.form.get("livraison_expedition_check") else ""
     env_vars["livraison_ramassage"] = request.form.get("livraison_ramassage", "")
