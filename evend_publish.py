@@ -17,30 +17,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 # --- Variables d'environnement ---
 USER_ID = os.environ.get("user_id", f"user_{os.getpid()}")
-
-# Utiliser un dossier accessible en écriture (dans ton projet ou dans /tmp)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")  # => /opt/render/project/src/uploads
-# Si tu veux du temporaire : UPLOAD_FOLDER = os.path.join(tempfile.gettempdir(), "uploads")
-
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-LOG_FILE = os.path.join(UPLOAD_FOLDER, f"{USER_ID}_import_log.txt")
-SESSION_FILE = os.path.join(UPLOAD_FOLDER, f"session_{USER_ID}.json")
-QUEUE_FILE = os.path.join(UPLOAD_FOLDER, "evend_publish_queue.json")
-
-# --- Vérification au lancement ---
-try:
-    test_message = "✅ UPLOAD_FOLDER accessible et log OK (evend_publish)"
-    with open(LOG_FILE, 'a', encoding='utf-8') as f:
-        f.write(f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] {test_message}\n")
-    print(f"[INIT] Dossier UPLOAD_FOLDER OK -> {UPLOAD_FOLDER}")
-except Exception as e:
-    print(f"[INIT] ❌ Erreur accès UPLOAD_FOLDER {UPLOAD_FOLDER}: {e}")
-
-
-
-# --- Variables e-Vend ---
 EVEND_EMAIL = os.environ.get("email")
 EVEND_PASSWORD = os.environ.get("password")
 LIVRAISON_RAMASSAGE_CHECK = os.environ.get("livraison_ramassage_check") == 'on'
@@ -50,15 +26,24 @@ FRAIS_PORT_SUP = float(os.environ.get("frais_port_sup", "0"))
 
 SESSION_MAX_AGE = 24 * 3600  # 24 heures
 
-# --- Fonction write_log ---
+# --- Dossiers et fichiers ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+LOG_FILE = os.path.join(UPLOAD_FOLDER, f"{USER_ID}_import_log.txt")
+SESSION_FILE = os.path.join(UPLOAD_FOLDER, f"session_{USER_ID}.json")
+QUEUE_FILE = os.path.join(UPLOAD_FOLDER, "evend_publish_queue.json")
+PROGRESS_FILE = os.path.join(UPLOAD_FOLDER, f"progress_{USER_ID}.txt")
+
 def write_log(msg):
     print(msg, flush=True)
     try:
         with open(LOG_FILE, 'a', encoding='utf-8') as f:
-            f.write(msg + "\n")
-            f.flush()
+            f.write(f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] {msg}\n")
     except Exception as e:
         print(f"⚠️ Impossible d'écrire dans le fichier de log: {e}", flush=True)
+
+write_log("✅ UPLOAD_FOLDER accessible et log OK")
 
 # --- Vérification CSV ---
 if len(sys.argv) < 2:
@@ -75,7 +60,6 @@ if not EVEND_EMAIL or not EVEND_PASSWORD:
     write_log("❌ Email ou mot de passe e-Vend manquant.")
     sys.exit(1)
 
-# --- Lecture CSV ---
 try:
     df = pd.read_csv(csv_file)
 except Exception as e:
@@ -143,19 +127,16 @@ def get_driver():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--no-proxy-server")
-    chrome_options.add_argument("--proxy-server='direct://'")
-    chrome_options.add_argument("--proxy-bypass-list=*")
-    chrome_options.add_argument("--disable-web-security")
-    chrome_options.add_argument("--ignore-certificate-errors")
-    chrome_options.add_argument("--allow-running-insecure-content")
+    chrome_options.add_argument("--remote-debugging-port=9222")
+    chrome_options.add_argument("--disable-features=VizDisplayCompositor")
     prefs = {"profile.managed_default_content_settings.images": 2}
     chrome_options.add_experimental_option("prefs", prefs)
-    return webdriver.Chrome(options=chrome_options)
+    driver = webdriver.Chrome(options=chrome_options)
+    driver.set_window_size(1920, 1080)
+    return driver
 
 EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
-EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
-PROGRESS_FILE = os.path.join(UPLOAD_FOLDER, f"progress_{USER_ID}.txt")
+EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/new"
 
 # --- Progress ---
 def save_progress(batch_index, idx):
@@ -281,7 +262,7 @@ for batch_index, batch in enumerate(batches):
     driver = None
     try:
         driver = get_driver()
-        wait = WebDriverWait(driver, 20)
+        wait = WebDriverWait(driver, 30)
         login(driver, wait)
         write_log(f"--- DÉBUT lot {batch_index+1}/{len(batches)} ---")
 
