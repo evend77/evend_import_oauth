@@ -83,19 +83,8 @@
     </div>
 </div>
 
-
-
-// Rafraîchir toutes les 3 secondes
-setInterval(refreshAllLogs, 3000);
-refreshAllLogs(); // premier affichage
-</script>
-
-</div>
-{% endif %}
-{% endwith %}
-
-<!-- Script pour rafraîchir le log complet quasi temps réel -->
 <script>
+// Rafraîchissement quasi temps réel du log complet
 function refreshRenderLog() {
     fetch("/get_import_log")
         .then(response => response.json())
@@ -103,7 +92,7 @@ function refreshRenderLog() {
             const logDiv = document.getElementById('render-log');
             if (logDiv) {
                 logDiv.textContent = data.log || "🔄 Aucun log disponible pour le moment...";
-                logDiv.scrollTop = logDiv.scrollHeight; // scrolle automatiquement vers le bas
+                logDiv.scrollTop = logDiv.scrollHeight; // scroll automatique
             }
         })
         .catch(err => console.error("Erreur récupération logs:", err));
@@ -113,6 +102,7 @@ function refreshRenderLog() {
 setInterval(refreshRenderLog, 3000);
 refreshRenderLog(); // premier affichage
 </script>
+
 
 
 
