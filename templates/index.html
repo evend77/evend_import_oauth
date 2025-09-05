@@ -22,92 +22,78 @@
         <div class="alert alert-danger text-center fw-bold mb-4" style="border-radius: 12px;">
             ⚠️ Veuillez vous connecter à votre compte e-Vend avant de lancer la procédure.
         </div>
-
-       <!-- Bloc regroupé messages + connecté eBay -->
+<!-- Bloc regroupé messages + connecté eBay + étapes + log -->
 {% with messages = get_flashed_messages() %}
 {% if messages or connected %}
-    <div class="alert-info-custom">
+<div class="alert-info-custom">
 
-        {% if messages %}
-            <h5 class="fw-bold text-center mb-3">Messages</h5>
-        {% endif %}
+    {% if messages %}
+        <h5 class="fw-bold text-center mb-3">Messages</h5>
+    {% endif %}
 
-        {% if connected %}
-            <div class="alert-success-custom text-center fw-bold">
-                ✅ Vous êtes connecté à eBay !
-            </div>
-        {% endif %}
-<!-- UL pour afficher les étapes en cours et les erreurs -->
-<div class="alert alert-info-custom mb-3">
-    <h5 class="fw-bold text-center mb-2">📌 Étapes en cours :</h5>
-    <ul id="import-steps" style="max-height: 5.5em; overflow-y: auto; padding-left: 20px; margin: 0;">
-        <!-- Les étapes et erreurs apparaîtront ici via JS -->
-    </ul>
-</div>
-
-<script>
-// Fonction pour ajouter une étape ou une erreur
-function addStep(message, isError = false) {
-    const stepsUl = document.getElementById('import-steps');
-    if (!stepsUl) return;
-
-    const li = document.createElement('li');
-    li.textContent = message;
-    if (isError) li.style.color = 'red'; // les erreurs en rouge
-    stepsUl.appendChild(li);
-
-    // Scroll automatique pour toujours voir la dernière étape
-    stepsUl.scrollTop = stepsUl.scrollHeight;
-
-    // Limiter à 5 lignes visibles en retirant les plus anciennes
-    while (stepsUl.children.length > 10) { // garder max 10 pour buffer
-        stepsUl.removeChild(stepsUl.firstChild);
-    }
-}
-</script>
-
-
-        <!-- UL pour les messages flash normaux -->
-        <ul id="import-log" style="max-height: 200px; overflow-y: auto; padding-left: 20px; margin-top: 10px;">
-            {% if messages %}
-                {% for message in messages %}
-                    <li>{{ message }}</li>
-                {% endfor %}
-            {% endif %}
-        </ul>
-
-        <!-- Bloc logs Render pour cet utilisateur -->
-        <div class="alert alert-info-custom mt-3">
-            <h5 class="fw-bold text-center mb-2">LOG import :</h5>
-            <div id="render-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
-                🔄 Les logs d'import s'afficheront ici...
-            </div>
+    {% if connected %}
+        <div class="alert-success-custom text-center fw-bold">
+            ✅ Vous êtes connecté à eBay !
         </div>
+    {% endif %}
 
+    <!-- Étapes en cours / erreurs -->
+    <div class="alert alert-info-custom mb-3">
+        <h5 class="fw-bold text-center mb-2">📌 Étapes en cours :</h5>
+        <ul id="import-steps" style="max-height: 5.5em; overflow-y: auto; padding-left: 20px; margin: 0;">
+            <!-- Les étapes et erreurs apparaîtront ici via JS -->
+        </ul>
     </div>
+
+    <!-- Script JS pour ajouter étape ou erreur -->
+    <script>
+    function addStep(message, isError = false) {
+        const stepsUl = document.getElementById('import-steps');
+        if (!stepsUl) return;
+
+        const li = document.createElement('li');
+        li.textContent = message;
+        if (isError) li.style.color = 'red';
+        stepsUl.appendChild(li);
+
+        // Scroll automatique
+        stepsUl.scrollTop = stepsUl.scrollHeight;
+
+        // Limiter le buffer à 10 lignes max
+        while (stepsUl.children.length > 10) {
+            stepsUl.removeChild(stepsUl.firstChild);
+        }
+    }
+    </script>
+
+    <!-- Messages flash -->
+    <ul id="import-log" style="max-height: 200px; overflow-y: auto; padding-left: 20px; margin-top: 10px;">
+        {% if messages %}
+            {% for message in messages %}
+                <li>{{ message }}</li>
+            {% endfor %}
+        {% endif %}
+    </ul>
+
+    <!-- Log complet -->
+    <div class="alert alert-info-custom mt-3">
+        <h5 class="fw-bold text-center mb-2">LOG import :</h5>
+        <div id="render-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
+            🔄 Les logs d'import s'afficheront ici...
+        </div>
+    </div>
+
+</div>
 {% endif %}
 {% endwith %}
 
-
-                <!-- Bloc logs Render pour cet utilisateur -->
-                <div class="alert alert-info-custom mt-3">
-                    <h5 class="fw-bold text-center mb-2">LOG import :</h5>
-                    <div id="render-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
-                        🔄 Les logs d'import s'afficheront ici...
-                    </div>
-                </div>
-
-            </div>
-        {% endif %}
-        {% endwith %}
-
-        <!-- Script pour rafraîchir les logs d'import en quasi temps réel -->
-  <script>
+<!-- Script pour rafraîchir les logs quasi temps réel -->
+<script>
 function refreshAllLogs() {
     fetch("/get_import_log")
         .then(response => response.json())
         .then(data => {
-            // Mettre à jour les messages UL
+            // Messages UL
             const messagesUl = document.getElementById('import-log');
             if (messagesUl) {
                 messagesUl.innerHTML = '';
@@ -121,7 +107,7 @@ function refreshAllLogs() {
                 messagesUl.scrollTop = messagesUl.scrollHeight;
             }
 
-            // Mettre à jour le div Render log
+            // Render log
             const logDiv = document.getElementById('render-log');
             if (logDiv) {
                 logDiv.textContent = data.log || "🔄 Aucun log disponible pour le moment...";
@@ -133,7 +119,7 @@ function refreshAllLogs() {
 
 // Rafraîchir toutes les 3 secondes
 setInterval(refreshAllLogs, 3000);
-refreshAllLogs();  // premier affichage immédiat
+refreshAllLogs(); // premier affichage
 </script>
 
 
