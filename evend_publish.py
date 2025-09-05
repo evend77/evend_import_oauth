@@ -17,11 +17,18 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 # --- Variables d'environnement ---
 USER_ID = os.environ.get("user_id", f"user_{os.getpid()}")
-UPLOAD_FOLDER = "/app/uploads"
+
+# Utiliser un dossier accessible en écriture (dans ton projet ou dans /tmp)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")  # => /opt/render/project/src/uploads
+# Si tu veux du temporaire : UPLOAD_FOLDER = os.path.join(tempfile.gettempdir(), "uploads")
+
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 LOG_FILE = os.path.join(UPLOAD_FOLDER, f"{USER_ID}_import_log.txt")
 SESSION_FILE = os.path.join(UPLOAD_FOLDER, f"session_{USER_ID}.json")
 QUEUE_FILE = os.path.join(UPLOAD_FOLDER, "evend_publish_queue.json")
+
 
 # --- Variables e-Vend ---
 EVEND_EMAIL = os.environ.get("email")
