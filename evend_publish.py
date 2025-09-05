@@ -33,11 +33,15 @@ LIVRAISON_RAMASSAGE_CHECK = os.environ.get("livraison_ramassage_check") == 'on'
 FRAIS_PORT_ARTICLE = float(os.environ.get("frais_port_article", "0"))
 FRAIS_PORT_SUP = float(os.environ.get("frais_port_sup", "0"))
 
-# --- DEBUG : afficher les variables reçues ---
-print("📥 Variables reçues pour l'import e-Vend :")
-for k in ["email","password","type_annonce","categorie","titre","description","condition","retour","garantie","prix","stock"]:
-    print(f"{k} = {os.environ.get(k)}")
-    
+# --- DEBUG : afficher et logger les variables reçues (mot de passe masqué) ---
+with open(LOG_FILE, 'a', encoding='utf-8') as f:
+    print("📥 Variables reçues pour l'import e-Vend :")
+    f.write("📥 Variables reçues pour l'import e-Vend :\n")
+    for k in ["email","password","type_annonce","categorie","titre","description","condition","retour","garantie","prix","stock"]:
+        value = os.environ.get(k)
+        display_value = value if k != "password" else "******"
+        print(f"{k} = {display_value}")
+        f.write(f"{k} = {display_value}\n")
 
 SESSION_MAX_AGE = 24 * 3600  # 24h
 BATCH_SIZE = 20
