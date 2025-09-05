@@ -51,6 +51,16 @@ def add_user_log_file(user_id, message):
     except Exception as e:
         print(f"❌ Impossible d'écrire dans le log {log_file}: {e}")
 
+# --- Vérification au lancement ---
+try:
+    test_user = "startup_check"
+    test_message = "✅ UPLOAD_FOLDER accessible et log OK"
+    add_user_log_file(test_user, test_message)
+    print(f"[INIT] Dossier UPLOAD_FOLDER OK -> {UPLOAD_FOLDER}")
+except Exception as e:
+    print(f"[INIT] ❌ Erreur accès UPLOAD_FOLDER {UPLOAD_FOLDER}: {e}")
+
+
 
 # --- Nouvelle route pour lire les logs ---
 @app.route('/get_import_log')
