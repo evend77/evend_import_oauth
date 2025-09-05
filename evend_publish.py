@@ -33,11 +33,21 @@ LIVRAISON_RAMASSAGE_CHECK = os.environ.get("livraison_ramassage_check") == 'on'
 FRAIS_PORT_ARTICLE = float(os.environ.get("frais_port_article", "0"))
 FRAIS_PORT_SUP = float(os.environ.get("frais_port_sup", "0"))
 
+# --- DEBUG : afficher les variables reçues ---
+print("📥 Variables reçues pour l'import e-Vend :")
+for k in ["email","password","type_annonce","categorie","titre","description","condition","retour","garantie","prix","stock"]:
+    print(f"{k} = {os.environ.get(k)}")
+    
+
 SESSION_MAX_AGE = 24 * 3600  # 24h
 BATCH_SIZE = 20
 
 EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
 EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
+
+
+
+
 
 # ---------------------------- Fonctions utilitaires ----------------------------
 def write_log(msg):
