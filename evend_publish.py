@@ -29,6 +29,16 @@ LOG_FILE = os.path.join(UPLOAD_FOLDER, f"{USER_ID}_import_log.txt")
 SESSION_FILE = os.path.join(UPLOAD_FOLDER, f"session_{USER_ID}.json")
 QUEUE_FILE = os.path.join(UPLOAD_FOLDER, "evend_publish_queue.json")
 
+# --- Vérification au lancement ---
+try:
+    test_message = "✅ UPLOAD_FOLDER accessible et log OK (evend_publish)"
+    with open(LOG_FILE, 'a', encoding='utf-8') as f:
+        f.write(f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] {test_message}\n")
+    print(f"[INIT] Dossier UPLOAD_FOLDER OK -> {UPLOAD_FOLDER}")
+except Exception as e:
+    print(f"[INIT] ❌ Erreur accès UPLOAD_FOLDER {UPLOAD_FOLDER}: {e}")
+
+
 
 # --- Variables e-Vend ---
 EVEND_EMAIL = os.environ.get("email")
