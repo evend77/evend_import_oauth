@@ -33,15 +33,24 @@ else:
 # --- Création de l'app Flask ---
 app = Flask(__name__)
 app.secret_key = 'UN_SECRET_POUR_SESSION'  # ⚠️ change-le en prod
+
+# --- Config Upload accessible en écriture ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")  # => /opt/render/project/src/uploads
+# Si tu veux du temporaire : UPLOAD_FOLDER = os.path.join(tempfile.gettempdir(), "uploads")
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
 # --- Ajouter log utilisateur ---
 def add_user_log_file(user_id, message):
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
     try:
         with open(log_file, 'a', encoding='utf-8') as f:
             f.write(f"[{datetime.utcnow().isoformat()}] {message}\n")
     except Exception as e:
         print(f"❌ Impossible d'écrire dans le log {log_file}: {e}")
+
 
 # --- Nouvelle route pour lire les logs ---
 @app.route('/get_import_log')
