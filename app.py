@@ -469,12 +469,15 @@ def post_evend():
         file_path = os.path.join(UPLOAD_FOLDER, safe_filename)
         file.save(file_path)
         set_last_csv_path(user_id, file_path)
+        # Ajouter une séparation dans le log pour ce nouvel import
+        add_user_log_file(user_id, "-------------------- NOUVEL IMPORT --------------------")
         add_user_log_file(user_id, f"📂 Fichier {file.filename} reçu et sauvegardé sous {safe_filename}")
     else:
         file_path = get_last_csv_path(user_id)
         if not file_path or not os.path.exists(file_path):
             flash("⚠️ Aucun fichier CSV disponible pour l'import.")
             return redirect(url_for('index'))
+        add_user_log_file(user_id, "-------------------- REUTILISATION DU CSV EXISTANT --------------------")
         add_user_log_file(user_id, f"📂 Utilisation du dernier CSV existant : {file_path}")
 
     # --- Lecture CSV ---
@@ -535,10 +538,6 @@ def post_evend():
         add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
 
     return redirect(url_for('index'))
-
-
-
-
 
 
 # --- Réinitialiser dernier CSV ---
