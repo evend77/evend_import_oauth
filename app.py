@@ -632,6 +632,18 @@ def test_bot():
 
 
 
+@app.route("/view_account_deletion_history")
+def view_account_deletion_history():
+    history_file = os.path.join(UPLOAD_FOLDER, "account_deletion_history.json")
+    if os.path.exists(history_file):
+        with open(history_file, "r", encoding="utf-8") as f:
+            content = f.read()
+        return f"<pre>{content}</pre>"
+    else:
+        return "⚠️ Aucun historique trouvé."
+
+
+
 
 
 
