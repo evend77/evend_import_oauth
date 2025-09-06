@@ -569,25 +569,67 @@ def reset_csv():
 
 
 
+import json
+
 @app.route("/account_deletion", methods=["POST"])
 def account_deletion():
-    data = request.get_json()
-    print("Notification eBay reçue :", data)  # Pour debug dans Render logs
-    return jsonify({"status": "received"}), 200
+    """
+    Endpoint pour recevoir les notifications de suppression de compte eBay.
+    - Accepte les requêtes POST JSON.
+    - Logue le contenu reçu dans Render et stocke dans un fichier historique.
+    - Retourne toujours un status 200 pour eBay.
+    """
+    try:
+        # Lecture du JSON envoyé par eBay
+        data = request.get_json(force=True, silent=True) or {}
+        print("🔔 Notification eBay reçue :", data)
+
+        # Stocker la notification dans un fichier historique
+        history_file = os.path.join(UPLOAD_FOLDER, "account_deletion_history.json")
+        if os.path.exists(history_file):
+            with open(history_file, "r", encoding="utf-8") as f:
+                history = json.load(f)
+        else:
+            history = []
+
+        history.append({
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": data
+        })
+
+        with open(history_file, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+
+        return jsonify({"status": "received"}), 200
+
+    except Exception as e:
+        print("❌ Erreur account_deletion :", e)
+        return jsonify({"status": "error", "message": str(e)}), 400
+
 
 @app.route('/test_bot')
 def test_bot():
+    """
+    Lance un test du bot evend_bot_test.py en arrière-plan.
+    - Écrit stdout et stderr dans /uploads/bot_test_log.txt
+    """
     import subprocess
     import os
 
     log_file = os.path.join(UPLOAD_FOLDER, "bot_test_log.txt")
-    with open(log_file, 'w', encoding='utf-8') as f:
-        subprocess.Popen(
-            ["python3", os.path.join(BASE_DIR, "evend_bot_test.py")],
-            stdout=f,
-            stderr=f
-        )
-    return "Test lancé. Vérifie le log dans /uploads/bot_test_log.txt"
+    try:
+        with open(log_file, 'w', encoding='utf-8') as f:
+            subprocess.Popen(
+                ["python3", os.path.join(BASE_DIR, "evend_bot_test.py")],
+                stdout=f,
+                stderr=f,
+                start_new_session=True  # Détache le processus du serveur Flask
+            )
+        return "✅ Test lancé. Vérifie le log dans /uploads/bot_test_log.txt"
+    except Exception as e:
+        print("❌ Erreur lancement test_bot :", e)
+        return f"❌ Impossible de lancer le test : {e}"
+
 
 
 
