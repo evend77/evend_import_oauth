@@ -59,14 +59,20 @@
     <div id="system-log" style="white-space: pre-wrap; line-height: 1.4em; max-height: 14em; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
         <!-- Les logs Selenium s'afficheront ici -->
     </div>
+    <div class="text-center mt-2">
+        <button id="scroll-bottom-btn" class="btn btn-sm btn-primary">⬇️ Aller en bas</button>
+    </div>
 </div>
 
 <script>
+const logDiv = document.getElementById("system-log");
+const scrollBtn = document.getElementById("scroll-bottom-btn");
+
+// Fonction pour récupérer et afficher les logs
 function fetchLogs() {
     fetch("/get_logs")
         .then(res => res.json())
         .then(data => {
-            const logDiv = document.getElementById("system-log");
             if (!data) return;
 
             // Affiche toutes les lignes
@@ -80,10 +86,16 @@ function fetchLogs() {
         .catch(err => console.error("Erreur récupération logs:", err));
 }
 
+// Bouton pour aller en bas
+scrollBtn.addEventListener("click", () => {
+    logDiv.scrollTop = logDiv.scrollHeight;
+});
+
 // Rafraîchit les logs toutes les secondes
 setInterval(fetchLogs, 1000);
 fetchLogs();  // affichage immédiat au chargement
 </script>
+
 
 
 
