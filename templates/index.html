@@ -107,20 +107,26 @@ function refreshAllLogs() {
                 logDiv.scrollTop = logDiv.scrollHeight;
             }
 
-            // Mettre à jour le div Log système
+     // Mettre à jour le div Log système avec les logs Selenium/import
+function refreshImportLogs() {
+    fetch('/get_import_log')
+        .then(response => response.json())
+        .then(data => {
             const sysLogDiv = document.getElementById('system-log');
             if (sysLogDiv) {
-                sysLogDiv.textContent = data.system_logs || "🔄 Aucun log système disponible pour le moment...";
-                sysLogDiv.scrollTop = sysLogDiv.scrollHeight;
+                // data.log contient le texte du log
+                sysLogDiv.textContent = data.log || "🔄 Aucun log disponible pour le moment...";
+                sysLogDiv.scrollTop = sysLogDiv.scrollHeight;  // scroll automatique en bas
             }
         })
         .catch(err => console.error("Erreur récupération logs:", err));
 }
 
 // Rafraîchir toutes les 3 secondes
-setInterval(refreshAllLogs, 3000);
-refreshAllLogs();  // premier affichage immédiat
+setInterval(refreshImportLogs, 3000);
+refreshImportLogs();  // premier affichage immédiat
 </script>
+
 
 
 
