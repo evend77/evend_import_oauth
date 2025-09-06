@@ -564,11 +564,32 @@ def reset_csv():
 
 
 
+
+
+
+
+
 @app.route("/account_deletion", methods=["POST"])
 def account_deletion():
     data = request.get_json()
     print("Notification eBay reçue :", data)  # Pour debug dans Render logs
     return jsonify({"status": "received"}), 200
+
+@app.route('/test_bot')
+def test_bot():
+    import subprocess
+    import os
+
+    log_file = os.path.join(UPLOAD_FOLDER, "bot_test_log.txt")
+    with open(log_file, 'w', encoding='utf-8') as f:
+        subprocess.Popen(
+            ["python3", os.path.join(BASE_DIR, "evend_bot_test.py")],
+            stdout=f,
+            stderr=f
+        )
+    return "Test lancé. Vérifie le log dans /uploads/bot_test_log.txt"
+
+
 
 
 
