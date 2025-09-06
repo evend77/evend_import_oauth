@@ -51,6 +51,27 @@ def add_user_log_file(user_id, message):
     except Exception as e:
         print(f"❌ Impossible d'écrire dans le log {log_file}: {e}")
 
+
+# --- Nouveau log centralisé pour erreurs et événements ---
+def log_event(user_id, message, is_error=False):
+    """
+    Log les événements utilisateur et les erreurs système.
+    - user_id peut être 'system' pour les erreurs globales.
+    """
+    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
+    prefix = "❌ " if is_error else "ℹ️ "
+    try:
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(f"[{datetime.utcnow().isoformat()}] {prefix}{message}\n")
+    except Exception as e:
+        print(f"❌ Impossible de logger {message} : {e}")
+
+
+
+
+
+
+
 # --- Nouvelle route pour lire les logs ---
 @app.route('/get_import_log')
 def get_import_log():
@@ -356,6 +377,22 @@ def fetch_active_items(oauth_token, max_items=MAX_PER_FILE):
 @app.route('/')
 def index():
     user_id = session.get('user_id')
+    user_logs = ""
+    system_logs = ""
+
+    # Logs utilisateur
+    if user_id:
+        log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
+        if os.path.exists(log_file):
+            with open(log_file, 'r', encoding='utf-8') as f:
+                user_logs = f.read()
+
+    # Logs système
+    sys_log_file = os.path.join(UPLOAD_FOLDER, "system_import_log.txt")
+    if os.path.exists(sys_log_file):
+        with open(sys_log_file, 'r', encoding='utf-8') as f:
+            system_logs = f.read()
+
     connected = False
     today_imported = 0
     remaining_quota = 0
@@ -365,10 +402,16 @@ def index():
             connected = True
             today_imported = get_import_count_today(user_id)
             remaining_quota = max(0, MAX_PER_DAY - today_imported)
-    return render_template('index.html',
-                           connected=connected,
-                           today_imported=today_imported,
-                           remaining_quota=remaining_quota)
+
+    return render_template(
+        'index.html',
+        connected=connected,
+        today_imported=today_imported,
+        remaining_quota=remaining_quota,
+        user_logs=user_logs,
+        system_logs=system_logs
+    )
+
 
 # --- OAuth eBay ---
 @app.route('/login_ebay')
@@ -643,6 +686,13 @@ def view_account_deletion_history():
         return "⚠️ Aucun historique trouvé."
 
 
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """
+    Capture toutes les erreurs non gérées et les logue dans le fichier 'system'.
+    """
+    log_event('system', f"Erreur critique: {e}", is_error=True)
+    return "❌ Une erreur est survenue. Vérifie les logs.", 500
 
 
 
