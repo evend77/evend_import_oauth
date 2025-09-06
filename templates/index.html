@@ -56,7 +56,7 @@
 <!-- Bloc logs Selenium / système -->
 <div class="alert alert-info-custom mt-3">
     <h5 class="fw-bold text-center mb-2">LOG Selenium :</h5>
-    <div id="system-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
+    <div id="system-log" style="white-space: pre-wrap; line-height: 1.4em; max-height: 14em; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
         <!-- Les logs Selenium s'afficheront ici -->
     </div>
 </div>
@@ -67,14 +67,24 @@ function fetchLogs() {
         .then(res => res.json())
         .then(data => {
             const logDiv = document.getElementById("system-log");
+            if (!data) return;
+
+            // Affiche toutes les lignes
             logDiv.innerHTML = data.map(m => `<div>${m}</div>`).join("");
-            logDiv.scrollTop = logDiv.scrollHeight; // scroll automatique vers le bas
-        });
+
+            // Scroll automatique uniquement si on est déjà en bas
+            if (logDiv.scrollHeight - logDiv.scrollTop <= logDiv.clientHeight + 20) {
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+        })
+        .catch(err => console.error("Erreur récupération logs:", err));
 }
 
 // Rafraîchit les logs toutes les secondes
 setInterval(fetchLogs, 1000);
+fetchLogs();  // affichage immédiat au chargement
 </script>
+
 
 
         {% endif %}
