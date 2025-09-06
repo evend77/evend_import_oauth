@@ -53,13 +53,29 @@
                 </div>
 
             </div>
-        <!-- Bloc logs système -->
+<!-- Bloc logs Selenium / système -->
 <div class="alert alert-info-custom mt-3">
-    <h5 class="fw-bold text-center mb-2">LOG système :</h5>
+    <h5 class="fw-bold text-center mb-2">LOG Selenium :</h5>
     <div id="system-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
-        🔄 Les logs système s'afficheront ici...
+        <!-- Les logs Selenium s'afficheront ici -->
     </div>
 </div>
+
+<script>
+function fetchLogs() {
+    fetch("/get_logs")
+        .then(res => res.json())
+        .then(data => {
+            const logDiv = document.getElementById("system-log");
+            logDiv.innerHTML = data.map(m => `<div>${m}</div>`).join("");
+            logDiv.scrollTop = logDiv.scrollHeight; // scroll automatique vers le bas
+        });
+}
+
+// Rafraîchit les logs toutes les secondes
+setInterval(fetchLogs, 1000);
+</script>
+
 
         {% endif %}
         {% endwith %}
