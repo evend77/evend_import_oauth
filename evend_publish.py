@@ -138,33 +138,30 @@ def load_session(driver):
 
 # ---------------------------- LOGIN CORRIGÉ ----------------------------
 def login(driver, wait):
-    if load_session(driver):
-        write_log("✅ Session existante chargée.")
-        driver.get("https://www.e-vend.ca/")
-        wait.until(EC.presence_of_element_located((By.ID, "dashboard")))
-        return
-
+    write_log("🔹 Naviguer vers e-Vend")
     driver.get("https://www.e-vend.ca/")
 
-    # 1️⃣ Cliquer sur l'onglet Connexion
+    write_log("🔹 Cliquer sur Connexion")
     WebDriverWait(driver, 10).until(
         EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Connexion')]"))
     ).click()
 
-    # 2️⃣ Attendre que le formulaire apparaisse
+    write_log("🔹 Attendre le formulaire de connexion")
     wait.until(EC.presence_of_element_located((By.NAME, "email")))
 
-    # 3️⃣ Remplir email et mot de passe
+    write_log("🔹 Remplir email et mot de passe")
     driver.find_element(By.NAME, "email").send_keys(EVEND_EMAIL)
     driver.find_element(By.NAME, "password").send_keys(EVEND_PASSWORD)
 
-    # 4️⃣ Cliquer sur Se connecter
+    write_log("🔹 Cliquer sur Se connecter")
     driver.find_element(By.XPATH, "//button[contains(text(),'Se connecter')]").click()
 
-    # Vérifier que le login est réussi
+    write_log("🔹 Attente du tableau de bord")
     wait.until(EC.presence_of_element_located((By.ID, "dashboard")))
-    write_log("✅ Connecté à e-Vend avec succès.")
+
+    write_log("✅ Login réussi")
     save_session(driver)
+
 
 # ---------------------------- Reste du script inchangé ----------------------------
 def check_radio(driver, name, value_to_check):
