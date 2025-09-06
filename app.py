@@ -380,18 +380,19 @@ def index():
     user_logs = ""
     system_logs = ""
 
-    # Logs utilisateur
+    # --- Logs utilisateur ---
     if user_id:
         log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
         if os.path.exists(log_file):
             with open(log_file, 'r', encoding='utf-8') as f:
                 user_logs = f.read()
 
-    # Logs système
+    # --- Logs système filtrés par utilisateur ---
     sys_log_file = os.path.join(UPLOAD_FOLDER, "system_import_log.txt")
-    if os.path.exists(sys_log_file):
+    if os.path.exists(sys_log_file) and user_id:
         with open(sys_log_file, 'r', encoding='utf-8') as f:
-            system_logs = f.read()
+            # Filtrer seulement les lignes contenant user_id
+            system_logs = "\n".join([line for line in f if user_id in line])
 
     connected = False
     today_imported = 0
