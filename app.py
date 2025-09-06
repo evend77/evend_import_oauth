@@ -564,6 +564,11 @@ def reset_csv():
 
 
 
+@app.route("/account_deletion", methods=["POST"])
+def account_deletion():
+    data = request.get_json()
+    print("Notification eBay reçue :", data)  # Pour debug dans Render logs
+    return jsonify({"status": "received"}), 200
 
 
 
