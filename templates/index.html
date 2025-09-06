@@ -56,44 +56,59 @@
 <!-- Bloc logs Selenium / système -->
 <div class="alert alert-info-custom mt-3">
     <h5 class="fw-bold text-center mb-2">LOG Selenium :</h5>
-    <div id="system-log" style="white-space: pre-wrap; line-height: 1.4em; max-height: 14em; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
+    <div id="system-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
         <!-- Les logs Selenium s'afficheront ici -->
     </div>
-    <div class="text-center mt-2">
-        <button id="scroll-bottom-btn" class="btn btn-sm btn-primary">⬇️ Aller en bas</button>
+    <div class="d-flex justify-content-between mt-2">
+        <button id="load-more-logs" class="btn btn-sm btn-secondary">Afficher plus</button>
+        <button id="scroll-top" class="btn btn-sm btn-primary">Haut</button>
     </div>
 </div>
 
 <script>
-const logDiv = document.getElementById("system-log");
-const scrollBtn = document.getElementById("scroll-bottom-btn");
+let logsOffset = 0;
+const logsBatchSize = 10;
+let allLogs = [];
 
-// Fonction pour récupérer et afficher les logs
-function fetchLogs() {
-    fetch("/get_logs")
+// Récupère tout le log
+function fetchAllLogs() {
+    fetch("/get_import_log")
         .then(res => res.json())
         .then(data => {
-            if (!data) return;
-
-            // Affiche toutes les lignes
-            logDiv.innerHTML = data.map(m => `<div>${m}</div>`).join("");
-
-            // Scroll automatique uniquement si on est déjà en bas
-            if (logDiv.scrollHeight - logDiv.scrollTop <= logDiv.clientHeight + 20) {
-                logDiv.scrollTop = logDiv.scrollHeight;
-            }
+            allLogs = data.log ? data.log.split("\n") : [];
+            displayLogs();
         })
         .catch(err => console.error("Erreur récupération logs:", err));
 }
 
-// Bouton pour aller en bas
-scrollBtn.addEventListener("click", () => {
+// Affiche une tranche du log
+function displayLogs() {
+    const logDiv = document.getElementById("system-log");
+    const start = Math.max(allLogs.length - logsBatchSize - logsOffset, 0);
+    const end = allLogs.length - logsOffset;
+    const slice = allLogs.slice(start, end);
+    logDiv.innerHTML = slice.join("\n");
     logDiv.scrollTop = logDiv.scrollHeight;
+}
+
+// Bouton “Afficher plus”
+document.getElementById("load-more-logs").addEventListener("click", () => {
+    logsOffset += logsBatchSize;
+    displayLogs();
 });
 
-// Rafraîchit les logs toutes les secondes
-setInterval(fetchLogs, 1000);
-fetchLogs();  // affichage immédiat au chargement
+// Bouton “Haut”
+document.getElementById("scroll-top").addEventListener("click", () => {
+    document.getElementById("system-log").scrollTop = 0;
+});
+
+// Rafraîchit automatiquement les nouvelles lignes toutes les 3 secondes
+setInterval(() => {
+    fetchAllLogs();
+    if(logsOffset > 0) logsOffset = 0; // reset pagination pour voir nouvelles lignes
+}, 3000);
+
+fetchAllLogs(); // premier affichage
 </script>
 
 
