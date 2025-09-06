@@ -72,28 +72,27 @@ def log_event(user_id, message, is_error=False):
 
 
 
-# --- Nouvelle route pour lire les logs ---
+# --- Nouvelle route pour lire les logs Selenium / import ---
 @app.route('/get_import_log')
 def get_import_log():
     user_id = session.get('user_id')
     if not user_id:
-        return jsonify({"log": "⚠️ Session expirée ou utilisateur non identifié."})
+        return jsonify({"log": ["⚠️ Session expirée ou utilisateur non identifié."]})
 
     log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
     if not os.path.exists(log_file):
         open(log_file, 'a').close()
-        return jsonify({"log": "ℹ️ Log créé, en attente d’événements..."})
+        return jsonify({"log": ["ℹ️ Log créé, en attente d’événements..."]})
 
     try:
         with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
-            f.seek(0, 2)  # aller à la fin
-            size = f.tell()
-            f.seek(max(size - 5000, 0))  # lire seulement les 5000 derniers caractères
-            logs = f.read()
+            lines = f.readlines()[-1000:]  # récupérer les 1000 dernières lignes
+            lines = [line.strip() for line in lines if line.strip()]
     except Exception as e:
-        logs = f"❌ Impossible de lire le fichier de log: {e}"
+        lines = [f"❌ Impossible de lire le fichier de log: {e}"]
 
-    return jsonify({"log": logs})
+    return jsonify({"log": lines})
+
 
 
 # --- Vérification au lancement ---
