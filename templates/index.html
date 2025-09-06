@@ -56,8 +56,8 @@
         {% endif %}
         {% endwith %}
 
-        <!-- Script pour rafraîchir les logs d'import en quasi temps réel -->
-  <script>
+<!-- Script pour rafraîchir les logs d'import et système en quasi temps réel -->
+<script>
 function refreshAllLogs() {
     fetch("/get_import_log")
         .then(response => response.json())
@@ -76,11 +76,18 @@ function refreshAllLogs() {
                 messagesUl.scrollTop = messagesUl.scrollHeight;
             }
 
-            // Mettre à jour le div Render log
+            // Mettre à jour le div Render log (log utilisateur)
             const logDiv = document.getElementById('render-log');
             if (logDiv) {
                 logDiv.textContent = data.log || "🔄 Aucun log disponible pour le moment...";
                 logDiv.scrollTop = logDiv.scrollHeight;
+            }
+
+            // Mettre à jour le div Log système
+            const sysLogDiv = document.getElementById('system-log');
+            if (sysLogDiv) {
+                sysLogDiv.textContent = data.system_logs || "🔄 Aucun log système disponible pour le moment...";
+                sysLogDiv.scrollTop = sysLogDiv.scrollHeight;
             }
         })
         .catch(err => console.error("Erreur récupération logs:", err));
@@ -90,6 +97,7 @@ function refreshAllLogs() {
 setInterval(refreshAllLogs, 3000);
 refreshAllLogs();  // premier affichage immédiat
 </script>
+
 
 
         {% if not connected %}
