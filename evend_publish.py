@@ -49,10 +49,6 @@ BATCH_SIZE = 20
 EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
 EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
 
-
-
-
-
 # ---------------------------- Fonctions utilitaires ----------------------------
 def write_log(msg):
     print(msg, flush=True)
@@ -140,21 +136,37 @@ def load_session(driver):
             write_log(f"⚠️ Impossible de charger la session: {e}")
     return False
 
+# ---------------------------- LOGIN CORRIGÉ ----------------------------
 def login(driver, wait):
     if load_session(driver):
         write_log("✅ Session existante chargée.")
-        driver.get(EVEND_LOGIN_URL)
+        driver.get("https://www.e-vend.ca/")
         wait.until(EC.presence_of_element_located((By.ID, "dashboard")))
         return
-    driver.get(EVEND_LOGIN_URL)
-    wait.until(EC.presence_of_element_located((By.ID, "email")))
-    driver.find_element(By.ID, "email").send_keys(EVEND_EMAIL)
-    driver.find_element(By.ID, "password").send_keys(EVEND_PASSWORD)
-    driver.find_element(By.ID, "loginBtn").click()
+
+    driver.get("https://www.e-vend.ca/")
+
+    # 1️⃣ Cliquer sur l'onglet Connexion
+    WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Connexion')]"))
+    ).click()
+
+    # 2️⃣ Attendre que le formulaire apparaisse
+    wait.until(EC.presence_of_element_located((By.NAME, "email")))
+
+    # 3️⃣ Remplir email et mot de passe
+    driver.find_element(By.NAME, "email").send_keys(EVEND_EMAIL)
+    driver.find_element(By.NAME, "password").send_keys(EVEND_PASSWORD)
+
+    # 4️⃣ Cliquer sur Se connecter
+    driver.find_element(By.XPATH, "//button[contains(text(),'Se connecter')]").click()
+
+    # Vérifier que le login est réussi
     wait.until(EC.presence_of_element_located((By.ID, "dashboard")))
     write_log("✅ Connecté à e-Vend avec succès.")
     save_session(driver)
 
+# ---------------------------- Reste du script inchangé ----------------------------
 def check_radio(driver, name, value_to_check):
     try:
         radios = driver.find_elements(By.NAME, name)
@@ -197,7 +209,6 @@ def wait_for_success_message(wait):
     except TimeoutException:
         return False
 
-# ---------------------------- Progression ----------------------------
 def save_progress(batch_index, idx):
     try:
         with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
@@ -217,7 +228,6 @@ def load_progress():
             pass
     return 0, -1
 
-# ---------------------------- Traitement CSV ----------------------------
 def process_csv(csv_path):
     if not os.path.exists(csv_path):
         write_log(f"❌ CSV introuvable: {csv_path}")
@@ -302,7 +312,6 @@ def process_csv(csv_path):
     write_log("🎉 Tous les articles du CSV ont été traités.")
     leave_queue(USER_ID)
 
-# ---------------------------- Surveillance automatique ----------------------------
 def watch_folder():
     processed = set()
     write_log(f"👀 Surveillance du dossier: {UPLOAD_FOLDER}")
@@ -321,6 +330,7 @@ if not EVEND_EMAIL or not EVEND_PASSWORD:
     sys.exit(1)
 
 watch_folder()
+
 
 
 
