@@ -23,8 +23,8 @@
             ⚠️ Veuillez vous connecter à votre compte e-Vend avant de lancer la procédure.
         </div>
 
-        <!-- Bloc messages flash + connecté eBay -->
-     {% with messages = get_flashed_messages() %}
+<!-- Bloc messages flash + connecté eBay -->
+{% with messages = get_flashed_messages() %}
 {% if messages or connected %}
 <div class="alert-info-custom">
     {% if messages %}
@@ -39,78 +39,60 @@
             ✅ Vous êtes connecté à eBay !
         </div>
     {% endif %}
+</div>
 
-    <!-- Bloc logs Render -->
-    <div class="alert alert-info-custom mt-3">
-        <h5 class="fw-bold text-center mb-2">LOG import :</h5>
-        <div id="render-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
-            🔄 Les logs d'import s'afficheront ici...
-        </div>
+<!-- Bloc logs Render -->
+<div class="alert alert-info-custom mt-3">
+    <h5 class="fw-bold text-center mb-2">LOG import :</h5>
+    <div id="render-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
+        🔄 Les logs d'import s'afficheront ici...
     </div>
+</div>
 
-    <!-- Bloc LOG Selenium -->
-    <div class="alert alert-info-custom mt-3">
-        <h5 class="fw-bold text-center mb-2">LOG Selenium :</h5>
-        <div id="selenium-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
-            🔄 Les logs Selenium s'afficheront ici...
-        </div>
+<!-- Bloc LOG Selenium -->
+<div class="alert alert-info-custom mt-3">
+    <h5 class="fw-bold text-center mb-2">LOG Selenium :</h5>
+    <div id="selenium-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
+        🔄 Les logs Selenium s'afficheront ici...
     </div>
-
-    <script>
-    function refreshAllLogs() {
-        // --- Log Import ---
-        fetch("/get_import_log")
-            .then(response => response.json())
-            .then(data => {
-                const logDiv = document.getElementById('render-log');
-                if (logDiv) {
-                    logDiv.textContent = data.log || "🔄 Aucun log disponible pour le moment...";
-                    logDiv.scrollTop = logDiv.scrollHeight;
-                }
-            })
-            .catch(err => console.error("Erreur récupération logs import:", err));
-
-        // --- Log Selenium ---
-        fetch("/get_selenium_log")
-            .then(response => response.json())
-            .then(data => {
-                const logDiv = document.getElementById('selenium-log');
-                if (logDiv) {
-                    logDiv.textContent = data.log || "🔄 Aucun log Selenium pour le moment...";
-                    logDiv.scrollTop = logDiv.scrollHeight;
-                }
-            })
-            .catch(err => console.error("Erreur récupération logs Selenium:", err));
-    }
-
-    setInterval(refreshAllLogs, 3000);
-    refreshAllLogs();  // affichage immédiat
-    </script>
-
 </div>
 {% endif %}
 {% endwith %}
 
 
-        <!-- Script pour rafraîchir les logs d'import en quasi temps réel -->
-        <script>
-        function refreshAllLogs() {
-            fetch("/get_import_log")
-                .then(response => response.json())
-                .then(data => {
-                    // Mettre à jour le div Render log
-                    const logDiv = document.getElementById('render-log');
-                    if (logDiv) {
-                        logDiv.textContent = data.log || "🔄 Aucun log disponible pour le moment...";
-                        logDiv.scrollTop = logDiv.scrollHeight;
-                    }
-                })
-                .catch(err => console.error("Erreur récupération logs:", err));
-        }
 
-        setInterval(refreshAllLogs, 3000);
-        refreshAllLogs();  // premier affichage immédiat
-        </script>
+        <!-- Script pour rafraîchir les logs d'import en quasi temps réel -->
+<script>
+function refreshAllLogs() {
+    // LOG import
+    fetch("/get_import_log")
+        .then(response => response.json())
+        .then(data => {
+            const logDiv = document.getElementById('render-log');
+            if (logDiv) {
+                logDiv.textContent = data.log || "🔄 Aucun log disponible pour le moment...";
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+        })
+        .catch(err => console.error("Erreur récupération logs import:", err));
+
+    // LOG Selenium
+    fetch("/get_selenium_log")
+        .then(response => response.json())
+        .then(data => {
+            const logDiv = document.getElementById('selenium-log');
+            if (logDiv) {
+                logDiv.textContent = data.log || "🔄 Aucun log Selenium pour le moment...";
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+        })
+        .catch(err => console.error("Erreur récupération logs Selenium:", err));
+}
+
+// Rafraîchissement toutes les 3 secondes
+setInterval(refreshAllLogs, 3000);
+refreshAllLogs();  // affichage immédiat
+</script>
 
         {% if not connected %}
             <div class="text-center">
@@ -244,7 +226,7 @@
                         </div>
                         <div class="mb-2">
                             <label class="form-label">Prix ($) -minimun 5$</label>
-                            <input type="number" class="form-control" name="prix" value="5" min="0">
+                            <input type="number" class="form-control" name="prix" value="5" min="5">
                         </div>
                         <div class="mb-2">
                             <label class="form-label">Stock</label>
