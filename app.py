@@ -543,23 +543,25 @@ def post_evend():
 
     # --- Préparer les variables d'environnement pour Selenium ---
     env_vars = os.environ.copy()
-    env_vars["email"] = request.form.get("evend_email", "")
-    env_vars["password"] = request.form.get("evend_password", "")
-    env_vars["type_annonce"] = request.form.get("type_annonce", "")
-    env_vars["categorie"] = request.form.get("categorie", "")
-    env_vars["titre"] = request.form.get("titre", "")
-    env_vars["description"] = request.form.get("description", "")
-    env_vars["condition"] = request.form.get("condition", "")
-    env_vars["retour"] = request.form.get("retour", "")
-    env_vars["garantie"] = request.form.get("garantie", "")
-    env_vars["prix"] = request.form.get("prix", "")
-    env_vars["stock"] = request.form.get("stock", "")
-    env_vars["frais_port_article"] = request.form.get("frais_port_article", "")
-    env_vars["frais_port_sup"] = request.form.get("frais_port_sup", "")
-    env_vars["photo_defaut"] = request.form.get("photo_defaut", "")
-    env_vars["livraison_ramassage_check"] = "on" if request.form.get("livraison_ramassage_check") else ""
-    env_vars["livraison_expedition_check"] = "on" if request.form.get("livraison_expedition_check") else ""
-    env_vars["livraison_ramassage"] = request.form.get("livraison_ramassage", "")
+    env_vars.update({
+        "email": request.form.get("evend_email", ""),
+        "password": request.form.get("evend_password", ""),
+        "type_annonce": request.form.get("type_annonce", ""),
+        "categorie": request.form.get("categorie", ""),
+        "titre": request.form.get("titre", ""),
+        "description": request.form.get("description", ""),
+        "condition": request.form.get("condition", ""),
+        "retour": request.form.get("retour", ""),
+        "garantie": request.form.get("garantie", ""),
+        "prix": request.form.get("prix", ""),
+        "stock": request.form.get("stock", ""),
+        "frais_port_article": request.form.get("frais_port_article", ""),
+        "frais_port_sup": request.form.get("frais_port_sup", ""),
+        "photo_defaut": request.form.get("photo_defaut", ""),
+        "livraison_ramassage_check": "on" if request.form.get("livraison_ramassage_check") else "",
+        "livraison_expedition_check": "on" if request.form.get("livraison_expedition_check") else "",
+        "livraison_ramassage": request.form.get("livraison_ramassage", "")
+    })
 
     # --- Lancer Selenium en arrière-plan avec log en temps réel ---
     try:
@@ -569,13 +571,24 @@ def post_evend():
         from log_wrapper import LogWrapper
         wrapper = LogWrapper(log_file)
 
-        subprocess.Popen(
+        import threading
+
+        proc = subprocess.Popen(
             ['python3', SELENIUM_SCRIPT, file_path],
             env=env_vars,
-            stdout=wrapper,
-            stderr=wrapper,
-            start_new_session=True
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
         )
+
+        def stream_logs(pipe, wrapper):
+            for line in iter(pipe.readline, ''):
+                wrapper.write(line)
+            pipe.close()
+
+        threading.Thread(target=stream_logs, args=(proc.stdout, wrapper), daemon=True).start()
+
         add_import(user_id, nb_items)
         flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
         add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
