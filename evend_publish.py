@@ -41,8 +41,14 @@ BATCH_SIZE = 20
 EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
 EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
 
-# ---------------------------- LogWrapper thread-safe ----------------------------
+# =====================================================
+# 🔹 LogWrapper thread-safe et flush immédiat
+# =====================================================
 class LogWrapper:
+    """
+    Wrapper pour écrire dans le log Selenium de manière thread-safe.
+    Chaque ligne est flushée immédiatement pour que le log soit visible en temps réel.
+    """
     def __init__(self, path):
         self.path = path
         self.lock = threading.Lock()
@@ -51,29 +57,61 @@ class LogWrapper:
         if text.strip():
             with self.lock:
                 with open(self.path, "a", encoding="utf-8") as f:
-                    f.write(text)
+                    f.write(f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] {text}\n")
                     f.flush()
 
     def flush(self):
-        pass
+        pass  # Nécessaire pour compatibilité avec certains appels print(file=...)
 
-log = LogWrapper(LOG_FILE)
-
-# ---------------------------- Fonctions utilitaires ----------------------------
+# =====================================================
+# 🔹 Fonction utilitaire pour écrire log + print console
+# =====================================================
 def write_log(msg):
-    print(msg, flush=True)
+    """Écrit dans le log Selenium et imprime aussi dans la console pour debug"""
+    print(f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] {msg}", flush=True)
     try:
-        log.write(f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] {msg}\n")
+        log.write(msg)
     except Exception as e:
         print(f"⚠️ Impossible d'écrire dans le log: {e}", flush=True)
 
-def cleanup_driver(driver=None):
-    if driver:
+# =====================================================
+# 🔹 Fonction pour récupérer le driver Chrome Selenium
+# =====================================================
+def get_driver():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-web-security")
+    chrome_options.add_argument("--ignore-certificate-errors")
+    chrome_options.add_argument("--allow-running-insecure-content")
+    chrome_options.add_experimental_option(
+        "prefs", {"profile.managed_default_content_settings.images": 2}
+    )
+    # Mode non-bufferisé pour que stdout/stderr se flush en temps réel
+    driver = webdriver.Chrome(options=chrome_options)
+    write_log("✅ Driver Selenium initialisé")
+    return driver
+
+# =====================================================
+# 🔹 Fonction pour lancer l'import CSV en arrière-plan
+# =====================================================
+def launch_csv_import(csv_path):
+    """
+    Lancement du traitement CSV dans un thread séparé.
+    Tous les logs seront visibles en temps réel dans LOG_FILE.
+    """
+    def _run():
         try:
-            driver.quit()
-        except:
-            pass
-    leave_queue(USER_ID)
+            process_csv(csv_path)
+        except Exception as e:
+            write_log(f"❌ Erreur inattendue dans le traitement du CSV {csv_path}: {e}")
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    write_log(f"🚀 Import CSV lancé en arrière-plan: {csv_path}")
+
 
 # ---------------------------- File d'attente ----------------------------
 def load_queue():
@@ -232,7 +270,22 @@ def load_progress():
             pass
     return 0, -1
 
+
+# =====================================================
+# ================= PROCESS CSV / EVEND PUBLISH =========
+# =====================================================
 def process_csv(csv_path):
+    """
+    📄 Traite un CSV pour publier les articles sur e-Vend
+    - Gère la file d'attente
+    - Batch processing
+    - Upload images
+    - Publication via Selenium
+    """
+
+    # ----------------------------
+    # Vérification CSV
+    # ----------------------------
     if not os.path.exists(csv_path):
         write_log(f"❌ CSV introuvable: {csv_path}")
         return
@@ -241,6 +294,9 @@ def process_csv(csv_path):
         write_log("❌ CSV vide.")
         return
 
+    # ----------------------------
+    # Entrer dans la file d'attente
+    # ----------------------------
     queue = enter_queue(USER_ID, len(df))
     position = next((i for i, u in enumerate(queue) if u['id'] == USER_ID), 0)
     if position > 0:
@@ -248,28 +304,45 @@ def process_csv(csv_path):
         write_log(f"⚠️ Vous êtes en position #{position+1} dans la file. Estimation: ~{est_time}s")
         return
 
+    # ----------------------------
+    # Chargement de la progression
+    # ----------------------------
     last_batch, last_idx = load_progress()
     batches = [df[i:i+BATCH_SIZE] for i in range(0, len(df), BATCH_SIZE)]
 
+    # ----------------------------
+    # Traitement des lots
+    # ----------------------------
     for batch_index, batch in enumerate(batches):
         if batch_index < last_batch:
             continue
 
         driver = None
         try:
+            # ----------------------------
+            # Initialisation Selenium & login
+            # ----------------------------
             driver = get_driver()
             wait = WebDriverWait(driver, 20)
             login(driver, wait)
+
             write_log(f"--- DÉBUT lot {batch_index+1}/{len(batches)} ---")
 
+            # ----------------------------
+            # Traitement des articles du lot
+            # ----------------------------
             for idx, row in batch.iterrows():
                 if batch_index == last_batch and idx <= last_idx:
                     continue
+
                 titre = str(row.get('titre', 'Titre manquant') or 'Titre manquant')
                 write_log(f"📌 Publication article {idx+1} lot {batch_index+1}: {titre}")
+
+                # Aller à la page de création d'annonce
                 driver.get(EVEND_NEW_LISTING_URL)
                 wait.until(EC.presence_of_element_located((By.ID, "type_annonce")))
 
+                # Remplissage des champs
                 fields = {
                     "type_annonce": str(row.get('type_annonce', 'Vente classique')),
                     "categorie": str(row.get('categorie', 'Autre')),
@@ -283,19 +356,24 @@ def process_csv(csv_path):
                     "frais_port_article": str(FRAIS_PORT_ARTICLE),
                     "frais_port_sup": str(FRAIS_PORT_SUP)
                 }
+
                 for field_id, value in fields.items():
                     try:
                         el = driver.find_element(By.ID, field_id)
                         el.clear()
                         el.send_keys(value)
-                    except: pass
+                    except:
+                        pass
 
+                # Option livraison ramassage
                 if LIVRAISON_RAMASSAGE_CHECK:
                     check_radio(driver, "livraison", "ramassage")
 
+                # Upload images
                 image_urls = [row.get('photo_defaut')] if row.get('photo_defaut') else []
                 upload_images(driver, image_urls)
 
+                # Soumettre l'annonce
                 try:
                     driver.find_element(By.ID, "submitBtn").click()
                     if wait_for_success_message(wait):
@@ -305,16 +383,26 @@ def process_csv(csv_path):
                 except:
                     write_log("❌ Impossible de soumettre l'article.")
 
+                # Sauvegarde de la progression
                 save_progress(batch_index, idx)
 
             write_log(f"--- FIN lot {batch_index+1}/{len(batches)} ---")
+
         except Exception as e:
             write_log(f"❌ Erreur lot {batch_index+1}: {e}")
+
         finally:
+            # ----------------------------
+            # Nettoyage driver Selenium
+            # ----------------------------
             cleanup_driver(driver)
 
+    # ----------------------------
+    # Fin du traitement CSV
+    # ----------------------------
     write_log("🎉 Tous les articles du CSV ont été traités.")
     leave_queue(USER_ID)
+
 
 def watch_folder():
     processed = set()
