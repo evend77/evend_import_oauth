@@ -7,6 +7,8 @@ import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 import threading
+from threading import Thread
+import selenium_runner.runner as selenium_runner
 
 
 
@@ -647,6 +649,14 @@ def test_bot():
     except Exception as e:
         print("❌ Erreur lancement test_bot :", e)
         return f"❌ Impossible de lancer le test : {e}"
+
+# --- Lancer Selenium watcher en arrière-plan ---
+def start_selenium_watcher():
+    t = Thread(target=selenium_runner.watch_folder, daemon=True)
+    t.start()
+    print("🚀 Selenium watcher démarré en arrière-plan")
+
+start_selenium_watcher()
 
 
 
