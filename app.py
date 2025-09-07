@@ -68,6 +68,10 @@ def add_user_log_file(user_id, message):
         print(f"❌ Impossible d'écrire dans le log {log_file}: {e}")
 
 
+# =====================================================
+# 🔹 ROUTE IMPORT LOG - permet de récupérer le log d'import
+# =====================================================
+from collections import deque
 
 @app.route('/get_import_log')
 def get_import_log():
@@ -81,21 +85,44 @@ def get_import_log():
         return jsonify({"log": "ℹ️ Log créé, en attente d’événements..."})
 
     try:
-        # Verrou pour éviter lecture concurrente
         with log_lock:
             with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
-                f.seek(0, 2)  # aller à la fin
-                size = f.tell()
-                f.seek(max(size - 5000, 0))  # lire seulement les 5000 derniers caractères
-                logs = f.read()
+                last_lines = deque(f, maxlen=500)  # 500 dernières lignes
+                logs = ''.join(last_lines)
     except Exception as e:
         logs = f"❌ Impossible de lire le fichier de log: {e}"
 
     return jsonify({"log": logs})
 
 
+# =====================================================
+# 🔹 ROUTE SELENIUM LOG - permet de récupérer le log du bot Selenium
+# =====================================================
+@app.route('/get_selenium_log')
+def get_selenium_log():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"log": "⚠️ Session expirée ou utilisateur non identifié."})
 
-# --- Vérification au lancement ---
+    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_selenium_log.txt")
+    if not os.path.exists(log_file):
+        open(log_file, 'a').close()
+        return jsonify({"log": "ℹ️ Log Selenium créé, en attente d’événements..."})
+
+    try:
+        with log_lock:
+            with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+                last_lines = deque(f, maxlen=500)  # 500 dernières lignes
+                logs = ''.join(last_lines)
+    except Exception as e:
+        logs = f"❌ Impossible de lire le fichier Selenium log: {e}"
+
+    return jsonify({"log": logs})
+
+
+# =====================================================
+# 🔹 VÉRIFICATION AU LANCEMENT
+# =====================================================
 try:
     test_user = "startup_check"
     test_message = "✅ UPLOAD_FOLDER accessible et log OK"
@@ -105,9 +132,9 @@ except Exception as e:
     print(f"[INIT] ❌ Erreur accès UPLOAD_FOLDER {UPLOAD_FOLDER}: {e}")
 
 
-
-
-# --- Lancement Selenium corrigé ---
+# =====================================================
+# 🔹 LANCEMENT SELENIUM IMPORT
+# =====================================================
 def launch_selenium_import(user_id, file_path, env_vars):
     log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -123,6 +150,8 @@ def launch_selenium_import(user_id, file_path, env_vars):
         add_user_log_file(user_id, f"✅ Import lancé pour {file_path}")
     except Exception as e:
         add_user_log_file(user_id, f"❌ Impossible de lancer l'import Selenium: {e}")
+
+
 
 
 
@@ -539,26 +568,24 @@ def post_evend():
     env_vars["livraison_expedition_check"] = "on" if request.form.get("livraison_expedition_check") else ""
     env_vars["livraison_ramassage"] = request.form.get("livraison_ramassage", "")
 
-    # --- Lancer Selenium en arrière-plan ---
-    try:
-        log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
-        add_user_log_file(user_id, f"🚀 Lancement Selenium pour {nb_items} articles depuis {file_path}")
+# --- Lancer Selenium en arrière-plan ---
+try:
+    add_user_log_file(user_id, f"🚀 Lancement Selenium pour {nb_items} articles depuis {file_path}")
+    
+    # Lancer Selenium
+    launch_selenium_import(user_id, file_path, env_vars)
+    
+    # Mettre à jour DB et log
+    add_import(user_id, nb_items)
+    flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
+    add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
 
-        subprocess.Popen(
-            ['python3', SELENIUM_SCRIPT, file_path],
-            env=env_vars,
-            stdout=open(log_file, 'a'),
-            stderr=open(log_file, 'a'),
-            start_new_session=True
-        )
-        add_import(user_id, nb_items)
-        flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
-        add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
-    except Exception as e:
-        flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
-        add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
+except Exception as e:
+    flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
+    add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
 
-    return redirect(url_for('index'))
+return redirect(url_for('index'))
+
 
 
 # --- Réinitialiser dernier CSV ---
