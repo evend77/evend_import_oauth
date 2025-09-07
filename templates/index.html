@@ -37,17 +37,53 @@
                     </div>
                 {% endif %}
 
-                <!-- Bloc logs Render pour cet utilisateur -->
-                <div class="alert alert-info-custom mt-3">
-                    <h5 class="fw-bold text-center mb-2">LOG import :</h5>
-                    <div id="render-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
-                        🔄 Les logs d'import s'afficheront ici...
-                    </div>
-                </div>
+<!-- Bloc logs Render pour cet utilisateur -->
+<div class="alert alert-info-custom mt-3">
+    <h5 class="fw-bold text-center mb-2">LOG import :</h5>
+    <div id="render-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
+        🔄 Les logs d'import s'afficheront ici...
+    </div>
+</div>
 
-            </div>
-        {% endif %}
-        {% endwith %}
+<!-- Bloc LOG Selenium -->
+<div class="alert alert-info-custom mt-3">
+    <h5 class="fw-bold text-center mb-2">LOG Selenium :</h5>
+    <div id="selenium-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
+        🔄 Les logs Selenium s'afficheront ici...
+    </div>
+</div>
+
+<script>
+function refreshAllLogs() {
+    // --- Log Import ---
+    fetch("/get_import_log")
+        .then(response => response.json())
+        .then(data => {
+            const logDiv = document.getElementById('render-log');
+            if (logDiv) {
+                logDiv.textContent = data.log || "🔄 Aucun log disponible pour le moment...";
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+        })
+        .catch(err => console.error("Erreur récupération logs import:", err));
+
+    // --- Log Selenium ---
+    fetch("/get_selenium_log")
+        .then(response => response.json())
+        .then(data => {
+            const logDiv = document.getElementById('selenium-log');
+            if (logDiv) {
+                logDiv.textContent = data.log || "🔄 Aucun log Selenium pour le moment...";
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+        })
+        .catch(err => console.error("Erreur récupération logs Selenium:", err));
+}
+
+// Rafraîchissement toutes les 3 secondes
+setInterval(refreshAllLogs, 3000);
+refreshAllLogs();  // affichage immédiat
+</script>
 
         <!-- Script pour rafraîchir les logs d'import en quasi temps réel -->
         <script>
