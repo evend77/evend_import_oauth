@@ -75,8 +75,22 @@ function fetchAllLogs() {
     fetch("/get_import_log")
         .then(res => res.json())
         .then(data => {
-            allLogs = data.log ? data.log.split("\n") : [];
+            allLogs = data.log || []; // ✅ data.log est déjà un tableau
             displayLogs();
+
+            // Mettre à jour le div Render log (log utilisateur)
+            const renderDiv = document.getElementById('render-log');
+            if (renderDiv) {
+                renderDiv.textContent = (data.log || []).join("\n") || "🔄 Aucun log disponible pour le moment...";
+                renderDiv.scrollTop = renderDiv.scrollHeight;
+            }
+
+            // Mettre à jour le div Log système avec les logs Selenium/import
+            const sysLogDiv = document.getElementById('system-log');
+            if (sysLogDiv) {
+                sysLogDiv.textContent = (data.log || []).join("\n") || "🔄 Aucun log disponible pour le moment...";
+                sysLogDiv.scrollTop = sysLogDiv.scrollHeight;
+            }
         })
         .catch(err => console.error("Erreur récupération logs:", err));
 }
@@ -87,8 +101,10 @@ function displayLogs() {
     const start = Math.max(allLogs.length - logsBatchSize - logsOffset, 0);
     const end = allLogs.length - logsOffset;
     const slice = allLogs.slice(start, end);
-    logDiv.innerHTML = slice.join("\n");
-    logDiv.scrollTop = logDiv.scrollHeight;
+    if (logDiv) {
+        logDiv.innerHTML = slice.join("\n");
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
 }
 
 // Bouton “Afficher plus”
@@ -110,6 +126,7 @@ setInterval(() => {
 
 fetchAllLogs(); // premier affichage
 </script>
+
 
 
 
