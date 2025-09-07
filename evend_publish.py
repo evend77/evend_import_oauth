@@ -34,22 +34,6 @@ FRAIS_PORT_ARTICLE = float(os.environ.get("frais_port_article", "0"))
 FRAIS_PORT_SUP = float(os.environ.get("frais_port_sup", "0"))
 
 # --- DEBUG : afficher et logger les variables reçues (mot de passe masqué) ---
-with open(LOG_FILE, 'a', encoding='utf-8') as f:
-    print("📥 Variables reçues pour l'import e-Vend :")
-    f.write("📥 Variables reçues pour l'import e-Vend :\n")
-    for k in ["email","password","type_annonce","categorie","titre","description","condition","retour","garantie","prix","stock"]:
-        value = os.environ.get(k)
-        display_value = value if k != "password" else "******"
-        print(f"{k} = {display_value}")
-        f.write(f"{k} = {display_value}\n")
-
-SESSION_MAX_AGE = 24 * 3600  # 24h
-BATCH_SIZE = 20
-
-EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
-EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
-
-# ---------------------------- Fonctions utilitaires ----------------------------
 def write_log(msg):
     print(msg, flush=True)
     try:
@@ -59,6 +43,20 @@ def write_log(msg):
     except Exception as e:
         print(f"⚠️ Impossible d'écrire dans le log: {e}", flush=True)
 
+write_log("🚀 Script démarré et prêt à traiter les CSV.")
+write_log("📥 Variables reçues pour l'import e-Vend :")
+for k in ["email","password","type_annonce","categorie","titre","description","condition","retour","garantie","prix","stock"]:
+    value = os.environ.get(k)
+    display_value = value if k != "password" else "******"
+    write_log(f"{k} = {display_value}")
+
+SESSION_MAX_AGE = 24 * 3600  # 24h
+BATCH_SIZE = 20
+
+EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
+EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
+
+# ---------------------------- Fonctions utilitaires ----------------------------
 def cleanup_driver(driver=None):
     if driver:
         try:
@@ -136,7 +134,7 @@ def load_session(driver):
             write_log(f"⚠️ Impossible de charger la session: {e}")
     return False
 
-# ---------------------------- LOGIN CORRIGÉ ----------------------------
+# ---------------------------- LOGIN ----------------------------
 def login(driver, wait):
     write_log("🔹 Naviguer vers e-Vend")
     driver.get("https://www.e-vend.ca/")
@@ -161,7 +159,6 @@ def login(driver, wait):
 
     write_log("✅ Login réussi")
     save_session(driver)
-
 
 # ---------------------------- Reste du script inchangé ----------------------------
 def check_radio(driver, name, value_to_check):
@@ -229,6 +226,8 @@ def process_csv(csv_path):
     if not os.path.exists(csv_path):
         write_log(f"❌ CSV introuvable: {csv_path}")
         return
+
+    write_log(f"🗂 Traitement du CSV: {csv_path}")
     df = pd.read_csv(csv_path)
     if df.empty:
         write_log("❌ CSV vide.")
@@ -327,6 +326,7 @@ if not EVEND_EMAIL or not EVEND_PASSWORD:
     sys.exit(1)
 
 watch_folder()
+
 
 
 
