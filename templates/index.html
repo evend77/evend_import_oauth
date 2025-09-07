@@ -44,6 +44,14 @@
         {% endif %}
         {% endwith %}
 
+        <!-- LOG IMPORT -->
+        <div class="alert-info-custom mt-4">
+            <h5 class="fw-bold text-center mb-3">LOG IMPORT</h5>
+            <div id="selenium-log" style="height: 200px; overflow-y: auto; background-color: #f1f3f5; padding: 10px; border-radius: 12px; font-family: monospace; font-size: 0.9rem;">
+                <!-- Les logs vont apparaître ici -->
+            </div>
+        </div>
+
         {% if not connected %}
             <div class="text-center">
                 <p class="mb-3">Vous devez connecter votre compte eBay pour continuer.</p>
@@ -211,10 +219,7 @@
 
                     <!-- Texte explicatif pour options supplémentaires -->
                     <p class="text-center text-muted mb-2"><em>Options supplémentaires / outils de gestion</em></p>
-
-                    <!-- Séparation visuelle pour options supplémentaires -->
                     <hr class="my-4 border border-secondary border-2 rounded">
-
                 </form>
 
             <!-- Réinitialiser le dernier CSV eBay -->
@@ -227,7 +232,7 @@
                 </form>
             </div>
 
-            <!-- Déconnexion eBay avec titre -->
+            <!-- Déconnexion eBay -->
             <div class="mb-4">
                 <h2 class="h5 text-secondary" style="font-weight: 900;"><strong>🔓 Vous pouvez vous déconnecter de eBay ici</strong></h2>
                 <div class="text-center">
@@ -258,6 +263,33 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Script pour actualiser les logs Selenium -->
+<script>
+    async function fetchLogs() {
+        try {
+            const response = await fetch('{{ url_for("get_logs") }}');
+            if (response.ok) {
+                const data = await response.json();
+                const logDiv = document.getElementById("selenium-log");
+                logDiv.innerHTML = "";
+                data.logs.slice(-10).forEach(line => {
+                    const p = document.createElement("div");
+                    p.textContent = line;
+                    logDiv.appendChild(p);
+                });
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+        } catch (err) {
+            console.error("Erreur fetch logs:", err);
+        }
+    }
+
+    setInterval(fetchLogs, 2000);
+    fetchLogs();
+</script>
+
 </body>
 </html>
+
 
