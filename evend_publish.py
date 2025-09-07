@@ -23,7 +23,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-LOG_FILE = os.path.join(UPLOAD_FOLDER, f"{USER_ID}_import_log.txt")
+LOG_FILE = os.path.join(UPLOAD_FOLDER, f"{USER_ID}_selenium_log.txt")
 SESSION_FILE = os.path.join(UPLOAD_FOLDER, f"session_{USER_ID}.json")
 QUEUE_FILE = os.path.join(UPLOAD_FOLDER, "evend_publish_queue.json")
 PROGRESS_FILE = os.path.join(UPLOAD_FOLDER, f"progress_{USER_ID}.txt")
