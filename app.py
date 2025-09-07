@@ -7,10 +7,23 @@ import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
+
+
+
+
+
+
 # --- Nettoyage uploads avant lancement (safe) ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+# --- Log global thread-safe ---
+log_lock = threading.Lock()
+
+
+
 
 for f in os.listdir(UPLOAD_FOLDER):
     file_path = os.path.join(UPLOAD_FOLDER, f)
@@ -50,6 +63,32 @@ def add_user_log_file(user_id, message):
             f.write(f"[{datetime.utcnow().isoformat()}] {message}\n")
     except Exception as e:
         print(f"❌ Impossible d'écrire dans le log {log_file}: {e}")
+
+
+
+@app.route('/get_import_log')
+def get_import_log():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"log": "⚠️ Session expirée ou utilisateur non identifié."})
+
+    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
+    if not os.path.exists(log_file):
+        open(log_file, 'a').close()
+        return jsonify({"log": "ℹ️ Log créé, en attente d’événements..."})
+
+    try:
+        with log_lock:
+            with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+                f.seek(0, 2)  # aller à la fin
+                size = f.tell()
+                f.seek(max(size - 5000, 0))  # lire seulement les 5000 derniers caractères
+                logs = f.read()
+    except Exception as e:
+        logs = f"❌ Impossible de lire le fichier de log: {e}"
+
+    return jsonify({"log": logs})
+
 
 # --- Nouvelle route pour lire les logs ---
 @app.route('/get_import_log')
