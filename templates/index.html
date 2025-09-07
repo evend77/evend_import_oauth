@@ -268,7 +268,7 @@
 <script>
     async function fetchLogs() {
         try {
-            const response = await fetch('{{ url_for("get_logs") }}');
+            const response = await fetch('{{ url_for("get_import_log") }}');
             if (response.ok) {
                 const data = await response.json();
                 const logDiv = document.getElementById("selenium-log");
