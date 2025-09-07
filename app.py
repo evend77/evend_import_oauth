@@ -68,6 +68,61 @@ def add_user_log_file(user_id, message):
         print(f"❌ Impossible d'écrire dans le log {log_file}: {e}")
 
 
+@app.route('/import', methods=['POST'])
+def import_file():
+    user_id = session.get("user_id")
+    if not user_id:
+        flash("⚠️ Utilisateur non connecté")
+        return redirect(url_for("index"))
+
+    # Récupérer email + mot de passe
+    session["evend_email"] = request.form.get("evend_email")
+    session["evend_password"] = request.form.get("evend_password")
+
+    # Vérifier
+    if not session["evend_email"] or not session["evend_password"]:
+        flash("❌ Email ou mot de passe e-Vend manquant")
+        return redirect(url_for("index"))
+
+    # Récupération du fichier CSV
+    file = request.files["file"]
+    if not file:
+        flash("❌ Aucun fichier fourni")
+        return redirect(url_for("index"))
+
+    filename = f"csv_ebay_import_{uuid.uuid4().hex}.csv"
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    file.save(file_path)
+
+    add_user_log_file(user_id, f"📂 Fichier {file.filename} reçu et sauvegardé sous {filename}")
+
+    # Lire CSV (juste pour compter)
+    df = pd.read_csv(file_path)
+    nb_items = len(df)
+    add_user_log_file(user_id, f"📑 Lecture du CSV terminée : {nb_items} lignes trouvées")
+
+    # --- Préparer les variables d'environnement pour Selenium ---
+    env_vars = os.environ.copy()
+    env_vars["EVEND_EMAIL"] = session.get("evend_email")
+    env_vars["EVEND_PASSWORD"] = session.get("evend_password")
+
+    try:
+        add_user_log_file(user_id, f"🚀 Lancement Selenium pour {nb_items} articles depuis {file_path}")
+
+        launch_selenium_import(user_id, file_path, env_vars)
+
+        add_import(user_id, nb_items)
+        flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
+        add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
+
+    except Exception as e:
+        flash(f"❌ Impossible de lancer l'import : {e}")
+        add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
+
+    return redirect(url_for("index"))
+
+
+
 # =====================================================
 # 🔹 ROUTE IMPORT LOG - permet de récupérer le log d'import
 # =====================================================
