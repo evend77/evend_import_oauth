@@ -587,16 +587,16 @@ def post_evend():
 
     # --- Lancer Selenium en arrière-plan ---
     try:
-        import threading
-
         wrapper = LogWrapper(import_log_file)
 
         def run_selenium():
             subprocess.Popen(
-                ['python3', SELENIUM_SCRIPT, file_path],
+                ['python3', '-u', SELENIUM_SCRIPT, file_path],  # -u = mode unbuffered
                 env=env_vars,
                 stdout=wrapper,
                 stderr=wrapper,
+                bufsize=1,                  # line-buffered
+                universal_newlines=True,    # texte au lieu de bytes
                 start_new_session=True
             )
 
@@ -611,27 +611,6 @@ def post_evend():
 
     return redirect(url_for('index'))
 
-
-# --- Réinitialiser dernier CSV ---
-@app.route('/reset_csv', methods=['GET', 'POST'])
-def reset_csv():
-    if request.method == 'GET':
-        return redirect(url_for('index'))
-
-    user_id = session.get('user_id')
-    if not user_id:
-        flash("⚠️ Session expirée.")
-        return redirect(url_for('index'))
-
-    last_csv = get_last_csv_path(user_id)
-    if last_csv and os.path.exists(last_csv):
-        os.remove(last_csv)
-        set_last_csv_path(user_id, None)
-        flash("🧹 Dernier CSV eBay supprimé.")
-    else:
-        flash("ℹ️ Aucun CSV précédent à supprimer.")
-
-    return redirect(url_for('index'))
 
 
 
