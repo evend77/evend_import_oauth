@@ -562,7 +562,7 @@ def post_evend():
     env_vars["livraison_expedition_check"] = "on" if request.form.get("livraison_expedition_check") else ""
     env_vars["livraison_ramassage"] = request.form.get("livraison_ramassage", "")
 
-   # --- Lancer Selenium en arrière-plan avec log en temps réel ---
+# --- Lancer Selenium en arrière-plan avec log en temps réel ---
 try:
     log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
     add_user_log_file(user_id, f"🚀 Lancement Selenium pour {nb_items} articles depuis {file_path}")
@@ -584,7 +584,8 @@ except Exception as e:
     flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
     add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
 
-    return redirect(url_for('index'))
+# <-- return final de la fonction, obligatoire
+return redirect(url_for('index'))
 
 
 # --- Réinitialiser dernier CSV ---
