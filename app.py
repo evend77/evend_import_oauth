@@ -489,8 +489,25 @@ def download_ebay_csv():
     flash(f"✅ CSV eBay prêt avec {len(df)} annonces.")
     return send_file(csv_path, as_attachment=True, download_name="csv_ebay_pret.csv", mimetype="text/csv")
 
-# --- Import e-Vend ---
+# --- LogWrapper thread-safe pour import individuel ---
+import threading
 
+class LogWrapper:
+    def __init__(self, path):
+        self.path = path
+        self.lock = threading.Lock()
+
+    def write(self, text):
+        if text.strip():
+            with self.lock:
+                with open(self.path, "a", encoding="utf-8") as f:
+                    f.write(text)
+
+    def flush(self):
+        pass
+
+
+# --- Route post_evend avec log unique par import ---
 @app.route('/post_evend', methods=['GET', 'POST'])
 def post_evend():
     if request.method == 'GET':
@@ -506,7 +523,7 @@ def post_evend():
         flash("⚠️ Connecte d’abord ton compte eBay.")
         return redirect(url_for('login_ebay'))
 
-    # --- Vérifier si un nouveau fichier CSV est uploadé ---
+    # --- CSV upload ou dernier CSV ---
     file = request.files.get('csv_file')
     if file and file.filename != '':
         safe_filename = f"csv_ebay_import_{uuid.uuid4().hex}.csv"
@@ -533,7 +550,7 @@ def post_evend():
         add_user_log_file(user_id, f"❌ CSV invalide : {e}")
         return redirect(url_for('index'))
 
-    # --- Vérifier quota journalier ---
+    # --- Quota journalier ---
     today_imported = get_import_count_today(user_id)
     remaining_quota = max(0, MAX_PER_DAY - today_imported)
     if nb_items > remaining_quota:
@@ -541,7 +558,7 @@ def post_evend():
         add_user_log_file(user_id, f"⚠️ Import annulé : quota restant {remaining_quota}, fichier {nb_items}")
         return redirect(url_for('index'))
 
-    # --- Préparer les variables d'environnement pour Selenium ---
+    # --- Variables pour Selenium ---
     env_vars = os.environ.copy()
     env_vars.update({
         "email": request.form.get("evend_email", ""),
@@ -563,41 +580,36 @@ def post_evend():
         "livraison_ramassage": request.form.get("livraison_ramassage", "")
     })
 
-    # --- Lancer Selenium en arrière-plan avec log en temps réel ---
+    # --- Log unique par import ---
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    import_log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_{timestamp}.log")
+    add_user_log_file(user_id, f"🚀 Import lancé, log individuel créé : {import_log_file}")
+
+    # --- Lancer Selenium en arrière-plan ---
     try:
-        log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
-        add_user_log_file(user_id, f"🚀 Lancement Selenium pour {nb_items} articles depuis {file_path}")
-
-        from log_wrapper import LogWrapper
-        wrapper = LogWrapper(log_file)
-
         import threading
 
-        proc = subprocess.Popen(
-            ['python3', SELENIUM_SCRIPT, file_path],
-            env=env_vars,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1
-        )
+        wrapper = LogWrapper(import_log_file)
 
-        def stream_logs(pipe, wrapper):
-            for line in iter(pipe.readline, ''):
-                wrapper.write(line)
-            pipe.close()
+        def run_selenium():
+            subprocess.Popen(
+                ['python3', SELENIUM_SCRIPT, file_path],
+                env=env_vars,
+                stdout=wrapper,
+                stderr=wrapper,
+                start_new_session=True
+            )
 
-        threading.Thread(target=stream_logs, args=(proc.stdout, wrapper), daemon=True).start()
-
+        threading.Thread(target=run_selenium, daemon=True).start()
         add_import(user_id, nb_items)
-        flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
-        add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
+        flash(f"✅ Import lancé en arrière-plan ({nb_items} articles). Log séparé créé.")
+        add_user_log_file(user_id, f"✅ Import démarré avec {nb_items} articles, fichier log : {import_log_file}")
+
     except Exception as e:
-        flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
+        flash(f"❌ Impossible de lancer l'import : {e}")
         add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
 
     return redirect(url_for('index'))
-
 
 
 # --- Réinitialiser dernier CSV ---
