@@ -246,7 +246,7 @@ async function fetchLogs() {
             const data = await response.json();
             const logDiv = document.getElementById("selenium-log");
             logDiv.innerHTML = "";
-            data.logs.forEach(line => {
+            data.log.split("\n").forEach(line => {
                 const p = document.createElement("div");
                 p.textContent = line;
                 logDiv.appendChild(p);
@@ -260,6 +260,5 @@ async function fetchLogs() {
 setInterval(fetchLogs, 2000);
 fetchLogs();
 </script>
-</body>
-</html>
+
 
