@@ -5,13 +5,14 @@
     <title>Importer vos annonces eBay vers e-Vend</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
+        /* Couleurs personnalisées pour simplifier les encadrés */
         .alert-info-custom { background-color: #d0ebff; border-radius: 12px; padding: 15px; margin-bottom: 20px; }
         .alert-success-custom { background-color: #b2f2bb; border-radius: 12px; padding: 10px; margin-top: 10px; }
         .alert-warning-custom { background-color: #ffe066; border-radius: 12px; padding: 15px; }
-        #selenium-log { max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 0.9em; }
     </style>
 </head>
 <body class="bg-light">
+
 <div class="container py-5">
     <div class="card shadow-lg p-4 mx-auto" style="max-width: 800px; border-radius: 15px;">
 
@@ -22,26 +23,74 @@
             ⚠️ Veuillez vous connecter à votre compte e-Vend avant de lancer la procédure.
         </div>
 
-        <!-- Messages & Connexion -->
+        <!-- Bloc regroupé messages + connecté eBay -->
         {% with messages = get_flashed_messages() %}
         {% if messages or connected %}
             <div class="alert-info-custom">
                 {% if messages %}
                     <h5 class="fw-bold text-center mb-3">Messages</h5>
-                    <ul class="mb-0">
-                        {% for message in messages %}
-                            <li>{{ message }}</li>
-                        {% endfor %}
-                    </ul>
                 {% endif %}
                 {% if connected %}
                     <div class="alert-success-custom text-center fw-bold">
                         ✅ Vous êtes connecté à eBay !
                     </div>
                 {% endif %}
+                <!-- UL pour les logs live -->
+                <ul id="import-log" style="max-height: 200px; overflow-y: auto; padding-left: 20px; margin-top: 10px;">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <li>{{ message }}</li>
+                        {% endfor %}
+                    {% endif %}
+                </ul>
+
+                <!-- Bloc logs Render pour cet utilisateur -->
+                <div class="alert alert-info-custom mt-3">
+                    <h5 class="fw-bold text-center mb-2">LOG import :</h5>
+                    <div id="render-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
+                        🔄 Les logs d'import s'afficheront ici...
+                    </div>
+                </div>
+
             </div>
         {% endif %}
         {% endwith %}
+
+        <!-- Script pour rafraîchir les logs d'import en quasi temps réel -->
+  <script>
+function refreshAllLogs() {
+    fetch("/get_import_log")
+        .then(response => response.json())
+        .then(data => {
+            // Mettre à jour les messages UL
+            const messagesUl = document.getElementById('import-log');
+            if (messagesUl) {
+                messagesUl.innerHTML = '';
+                data.log.split('\n').forEach(line => {
+                    if (line.trim() !== '') {
+                        const li = document.createElement('li');
+                        li.textContent = line;
+                        messagesUl.appendChild(li);
+                    }
+                });
+                messagesUl.scrollTop = messagesUl.scrollHeight;
+            }
+
+            // Mettre à jour le div Render log
+            const logDiv = document.getElementById('render-log');
+            if (logDiv) {
+                logDiv.textContent = data.log || "🔄 Aucun log disponible pour le moment...";
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+        })
+        .catch(err => console.error("Erreur récupération logs:", err));
+}
+
+// Rafraîchir toutes les 3 secondes
+setInterval(refreshAllLogs, 3000);
+refreshAllLogs();  // premier affichage immédiat
+</script>
+
 
         {% if not connected %}
             <div class="text-center">
@@ -54,7 +103,8 @@
             <!-- Étape 1 : Télécharger vos annonces eBay -->
             <div class="mb-4">
                 <h2 class="h5 text-secondary" style="font-weight: 900;"><strong>Étape 1: Télécharger vos annonces eBay</strong></h2>
-                <p>Exportez vos annonces eBay au format CSV pour préparer l’import sur e-Vend. Vérifiez vos informations avant l’import.</p>
+                <p>Dans cette première étape, vous allez exporter vos annonces eBay au format CSV afin de pouvoir les préparer pour l’importation sur e-Vend. Une fois téléchargé, vous pourrez vérifier et ajuster vos informations avant de passer à l’étape suivante, l’importation sur e-Vend.</p>
+                <p>⚠️ Remarque importante : Vous devez être connecté à votre compte eBay pour télécharger vos annonces. Votre quota journalier d’exportation est limité, donc assurez-vous de ne pas dépasser la limite.</p>
                 {% if remaining_quota > 0 %}
                     <a href="{{ url_for('download_ebay_csv') }}" class="btn btn-success btn-lg w-100">
                         ⬇️ Télécharger mon CSV eBay
@@ -66,15 +116,36 @@
                 {% endif %}
             </div>
 
-            <!-- Étape 2 : Importer CSV sur e-Vend -->
+            <!-- Étape 2 : Importer un CSV sur e-Vend -->
             <div class="mb-4">
                 <h2 class="h5 text-secondary" style="font-weight: 900;"><strong>Étape 2: Importer un CSV sur e-Vend</strong></h2>
-                <p>Importez le CSV vérifié. Renseignez les valeurs par défaut si eBay ne fournit pas certaines informations.</p>
+                <p>Dans cette étape, vous devez importer le CSV que vous avez obtenu de eBay et préalablement vérifié dans "BROWSE". En bas, vous pourrez renseigner des valeurs par défaut à utiliser si eBay ne fournit pas certaines informations pour un article, afin d'éviter toute interruption lors du transfert vers e-Vend. Il vous sera possible de venir modifier ces valeurs plus tard sur votre compte vendeur. Votre adresse courriel ainsi que votre mot de passe sont nécessaires afin d'ajouter vos nouvelles annonces. Une fois que tout est terminé, nous vous conseillons de les changer.</p>
+
                 <form action="{{ url_for('post_evend') }}" method="post" enctype="multipart/form-data">
+                    <!-- Browse CSV -->
                     <input type="file" class="form-control mb-3" name="csv_file" accept=".csv" required>
 
+                    <!-- Section Identifiants e-Vend -->
+                    <div class="alert alert-info-custom mb-3">
+                        <h6 class="fw-bold">🔑 Vos identifiants e-Vend</h6>
+
+                        <!-- Email -->
+                        <div class="mb-2">
+                            <label class="form-label">Votre email e-Vend</label>
+                            <input type="email" class="form-control" name="evend_email" placeholder="exemple@domaine.com" required>
+                        </div>
+
+                        <!-- Mot de passe -->
+                        <div class="mb-2">
+                            <label class="form-label">Votre mot de passe e-Vend</label>
+                            <input type="password" class="form-control" name="evend_password" placeholder="Votre mot de passe" required>
+                        </div>
+                    </div>
+
+                    <!-- Valeurs par défaut si eBay ne fournit pas certaines infos (réordonnées) -->
                     <div class="alert alert-info-custom mb-3">
                         <h6 class="fw-bold">Valeurs par défaut (si eBay ne fournit pas)</h6>
+
                         <!-- Type d'annonce -->
                         <div class="mb-2">
                             <label class="form-label">Type d’annonce</label>
@@ -84,6 +155,7 @@
                                 <option>Article remis à neuf</option>
                             </select>
                         </div>
+
                         <!-- Catégorie -->
                         <div class="mb-2">
                             <label class="form-label">Catégorie</label>
@@ -119,31 +191,35 @@
                                 <option value="Autre / Divers">Autre / Divers > Autre</option>
                             </select>
                         </div>
-                        <!-- Titre -->
+
+                        <!-- Titre de l'annonce -->
                         <div class="mb-2">
                             <label class="form-label">Titre de l'annonce</label>
-                            <input type="text" class="form-control" name="titre" placeholder="Ex : Magnifique montre vintage">
+                            <input type="text" class="form-control" name="titre" placeholder="Ex : Magnifique montre vintage" value="">
                         </div>
+
                         <!-- Descriptif -->
                         <div class="mb-2">
                             <label class="form-label">Descriptif de l'annonce</label>
                             <textarea class="form-control" name="description" placeholder="Décrivez votre article ici..."></textarea>
                         </div>
-                        <!-- État -->
+
+                        <!-- État de l'article -->
                         <div class="mb-2">
                             <label class="form-label">État de l'article (condition)</label>
                             <select class="form-select" name="condition">
-                                <option selected>1. Neuf / Jamais utilisé</option>
-                                <option>2. Comme neuf</option>
-                                <option>3. Très bon état</option>
-                                <option>4. Bon état</option>
-                                <option>5. État correct</option>
-                                <option>6. Usé / Bien utilisé</option>
-                                <option>7. À réparer</option>
-                                <option>8. Pour pièces</option>
+                                <option selected>1. Neuf / Jamais utilisé – L’article est neuf, dans son emballage d’origine</option>
+                                <option>2. Comme neuf – Utilisé une ou deux fois, en excellent état</option>
+                                <option>3. Très bon état – Quelques signes mineurs d’usure, mais fonctionne parfaitement</option>
+                                <option>4. Bon état – L’article a été utilisé, mais reste en bon état général</option>
+                                <option>5. État correct – Présente des marques d’usure visibles, mais fonctionne</option>
+                                <option>6. Usé / Bien utilisé – L’article fonctionne mais montre des signes d’usage importants</option>
+                                <option>7. À réparer – Ne fonctionne pas ou endommagé, peut être réparé</option>
+                                <option>8. Pour pièces – Non fonctionnel, vendu pour récupérer des pièces</option>
                             </select>
                         </div>
-                        <!-- Retour -->
+
+                        <!-- Retour offert -->
                         <div class="mb-2">
                             <label class="form-label">Retour offert</label>
                             <select class="form-select" name="retour">
@@ -151,47 +227,77 @@
                                 <option>Oui, retour sous 30 jours après date d'achat</option>
                             </select>
                         </div>
+
                         <!-- Garantie -->
                         <div class="mb-2">
                             <label class="form-label">Garantie offerte</label>
                             <select class="form-select" name="garantie">
                                 <option selected>Non, aucune garantie n'est offerte</option>
-                                <option>Oui, une garantie est offerte</option>
+                                <option>Non, aucune garantie, vendu tel quel</option>
+                                <option>Oui, une garantie est offerte (détails dans description)</option>
                             </select>
                         </div>
+
                         <!-- Prix -->
                         <div class="mb-2">
-                            <label class="form-label">Prix ($)</label>
+                            <label class="form-label">Prix ($) -minimun 5$</label>
                             <input type="number" class="form-control" name="prix" value="5" min="0">
                         </div>
+
                         <!-- Stock -->
                         <div class="mb-2">
                             <label class="form-label">Stock</label>
                             <input type="number" class="form-control" name="stock" value="1" min="1">
                         </div>
-                        <!-- Livraison -->
+
+                        <!-- Options de livraison -->
                         <div class="mb-2">
-                            <label class="form-label">Options de livraison</label>
-                            <select class="form-select mb-1" name="livraison_type">
-                                <option selected>Ramassage sur place</option>
-                                <option>Expédition par transporteur</option>
-                            </select>
-                            <input type="text" class="form-control mb-1" name="livraison_ramassage" placeholder="Adresse du ramassage">
-                            <input type="number" class="form-control mb-1" name="frais_port_article" placeholder="Frais de port ($)">
-                            <input type="number" class="form-control mb-1" name="frais_port_sup" placeholder="Frais de port supplémentaires ($)">
+                            <h6 class="fw-bold">Options de livraison</h6>
+
+                            <!-- Ramassage sur place -->
+                            <div class="form-check mb-1">
+                                <input class="form-check-input" type="checkbox" name="livraison_ramassage_check" id="livraison_ramassage_check">
+                                <label class="form-check-label" for="livraison_ramassage_check">
+                                    Ramassage sur place
+                                </label>
+                            </div>
+                            <label class="form-label">Adresse du ramassage</label>
+                            <input type="text" class="form-control mb-2" name="livraison_ramassage" placeholder="Adresse du ramassage" value="123 Rue Exemple, Montréal">
+
+                            <!-- Expédition par transporteur -->
+                            <div class="form-check mb-1">
+                                <input class="form-check-input" type="checkbox" name="livraison_expedition_check" id="livraison_expedition_check" checked>
+                                <label class="form-check-label" for="livraison_expedition_check">
+                                    Expédition par transporteur
+                                </label>
+                            </div>
+                            <label class="form-label">Frais de port pour un article</label>
+                            <input type="number" class="form-control mb-1" name="frais_port_article" value="5">
+                            <label class="form-label">Frais de port pour les articles supplémentaires</label>
+                            <input type="number" class="form-control mb-1" name="frais_port_sup" value="2">
                         </div>
+
                         <!-- Photo -->
                         <div class="mb-2">
-                            <label class="form-label">Photo par défaut</label>
+                            <label class="form-label">Photo par défaut (si eBay ne fournit pas)</label>
                             <input type="text" class="form-control" name="photo_defaut" value="https://drive.google.com/file/d/1Hxe2ZKcGDD1TSaQzP8ho0GRoj4Cio7n3/view?usp=sharing">
                         </div>
                     </div>
 
-                    <button type="submit" class="btn btn-success btn-lg w-100 mb-3">📤 Importer sur e-Vend</button>
-                </form>
-            </div>
+                    <!-- Bouton importer -->
+                    <button type="submit" class="btn btn-success btn-lg w-100 mb-3">
+                        📤 Importer sur e-Vend
+                    </button>
 
-            <!-- Réinitialiser CSV -->
+                    <!-- Texte explicatif pour options supplémentaires -->
+                    <p class="text-center text-muted mb-2"><em>Options supplémentaires / outils de gestion</em></p>
+
+                    <!-- Séparation visuelle pour options supplémentaires -->
+                    <hr class="my-4 border border-secondary border-2 rounded">
+
+                </form>
+
+            <!-- Réinitialiser le dernier CSV eBay -->
             <div class="mb-4">
                 <h2 class="h5 text-secondary" style="font-weight: 900;"><strong>🧹 Réinitialiser le dernier CSV eBay</strong></h2>
                 <form action="{{ url_for('reset_csv') }}" method="post">
@@ -201,7 +307,7 @@
                 </form>
             </div>
 
-            <!-- Déconnexion eBay -->
+            <!-- Déconnexion eBay avec titre -->
             <div class="mb-4">
                 <h2 class="h5 text-secondary" style="font-weight: 900;"><strong>🔓 Vous pouvez vous déconnecter de eBay ici</strong></h2>
                 <div class="text-center">
@@ -211,13 +317,7 @@
                 </div>
             </div>
 
-            <!-- LOG IMPORT -->
-            <div class="alert alert-info-custom mt-4">
-                <h5 class="fw-bold">LOG IMPORT</h5>
-                <div id="selenium-log"></div>
-            </div>
-
-            <!-- Limites -->
+            <!-- Limites d'importation -->
             <div class="alert alert-warning-custom mt-4">
                 <h5 class="fw-bold">⚠️ Limites d'importation :</h5>
                 <ul class="mb-0">
@@ -238,27 +338,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-async function fetchLogs() {
-    try {
-        const response = await fetch('{{ url_for("get_import_log") }}');
-        if (response.ok) {
-            const data = await response.json();
-            const logDiv = document.getElementById("selenium-log");
-            logDiv.innerHTML = "";
-            data.log.split("\n").forEach(line => {
-                const p = document.createElement("div");
-                p.textContent = line;
-                logDiv.appendChild(p);
-            });
-            logDiv.scrollTop = logDiv.scrollHeight;
-        }
-    } catch (err) {
-        console.error("Erreur fetch logs:", err);
-    }
-}
-setInterval(fetchLogs, 2000);
-fetchLogs();
-</script>
+</body>
+</html>
 
 
