@@ -29,11 +29,7 @@
             <div class="alert-info-custom">
                 {% if messages %}
                     <h5 class="fw-bold text-center mb-3">Messages</h5>
-                    <ul>
-                        {% for message in messages %}
-                            <li>{{ message }}</li>
-                        {% endfor %}
-                    </ul>
+                   
                 {% endif %}
                 {% if connected %}
                     <div class="alert-success-custom text-center fw-bold">
