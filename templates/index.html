@@ -29,160 +29,20 @@
             <div class="alert-info-custom">
                 {% if messages %}
                     <h5 class="fw-bold text-center mb-3">Messages</h5>
+                    <ul class="mb-0">
+                        {% for message in messages %}
+                            <li>{{ message }}</li>
+                        {% endfor %}
+                    </ul>
                 {% endif %}
                 {% if connected %}
                     <div class="alert-success-custom text-center fw-bold">
                         ✅ Vous êtes connecté à eBay !
                     </div>
                 {% endif %}
-                <!-- UL pour les logs live -->
-                <ul id="import-log" style="max-height: 200px; overflow-y: auto; padding-left: 20px; margin-top: 10px;">
-                    {% if messages %}
-                        {% for message in messages %}
-                            <li>{{ message }}</li>
-                        {% endfor %}
-                    {% endif %}
-                </ul>
-
-                <!-- Bloc logs Render pour cet utilisateur -->
-                <div class="alert alert-info-custom mt-3">
-                    <h5 class="fw-bold text-center mb-2">LOG import :</h5>
-                    <div id="render-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
-                        🔄 Les logs d'import s'afficheront ici...
-                    </div>
-                </div>
-
             </div>
-<!-- Bloc logs Selenium / système -->
-<div class="alert alert-info-custom mt-3">
-    <h5 class="fw-bold text-center mb-2">LOG Selenium :</h5>
-    <div id="system-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
-        <!-- Les logs Selenium s'afficheront ici -->
-    </div>
-    <div class="d-flex justify-content-between mt-2">
-        <button id="load-more-logs" class="btn btn-sm btn-secondary">Afficher plus</button>
-        <button id="scroll-top" class="btn btn-sm btn-primary">Haut</button>
-    </div>
-</div>
-
-<script>
-let logsOffset = 0;
-const logsBatchSize = 10;
-let allLogs = [];
-
-// Récupère tout le log
-function fetchAllLogs() {
-    fetch("/get_import_log")
-        .then(res => res.json())
-        .then(data => {
-            allLogs = data.log || []; // ✅ data.log est déjà un tableau
-            displayLogs();
-
-            // Mettre à jour le div Render log (log utilisateur)
-            const renderDiv = document.getElementById('render-log');
-            if (renderDiv) {
-                renderDiv.textContent = (data.log || []).join("\n") || "🔄 Aucun log disponible pour le moment...";
-                renderDiv.scrollTop = renderDiv.scrollHeight;
-            }
-
-            // Mettre à jour le div Log système avec les logs Selenium/import
-            const sysLogDiv = document.getElementById('system-log');
-            if (sysLogDiv) {
-                sysLogDiv.textContent = (data.log || []).join("\n") || "🔄 Aucun log disponible pour le moment...";
-                sysLogDiv.scrollTop = sysLogDiv.scrollHeight;
-            }
-        })
-        .catch(err => console.error("Erreur récupération logs:", err));
-}
-
-// Affiche une tranche du log
-function displayLogs() {
-    const logDiv = document.getElementById("system-log");
-    const start = Math.max(allLogs.length - logsBatchSize - logsOffset, 0);
-    const end = allLogs.length - logsOffset;
-    const slice = allLogs.slice(start, end);
-    if (logDiv) {
-        logDiv.innerHTML = slice.join("\n");
-        logDiv.scrollTop = logDiv.scrollHeight;
-    }
-}
-
-// Bouton “Afficher plus”
-document.getElementById("load-more-logs").addEventListener("click", () => {
-    logsOffset += logsBatchSize;
-    displayLogs();
-});
-
-// Bouton “Haut”
-document.getElementById("scroll-top").addEventListener("click", () => {
-    document.getElementById("system-log").scrollTop = 0;
-});
-
-// Rafraîchit automatiquement les nouvelles lignes toutes les 3 secondes
-setInterval(() => {
-    fetchAllLogs();
-    if(logsOffset > 0) logsOffset = 0; // reset pagination pour voir nouvelles lignes
-}, 3000);
-
-fetchAllLogs(); // premier affichage
-</script>
-
-
-
-
-
         {% endif %}
         {% endwith %}
-
-<!-- Script pour rafraîchir les logs d'import et système en quasi temps réel -->
-<script>
-function refreshAllLogs() {
-    fetch("/get_import_log")
-        .then(response => response.json())
-        .then(data => {
-            // Mettre à jour les messages UL
-            const messagesUl = document.getElementById('import-log');
-            if (messagesUl) {
-                messagesUl.innerHTML = '';
-                data.log.split('\n').forEach(line => {
-                    if (line.trim() !== '') {
-                        const li = document.createElement('li');
-                        li.textContent = line;
-                        messagesUl.appendChild(li);
-                    }
-                });
-                messagesUl.scrollTop = messagesUl.scrollHeight;
-            }
-
-            // Mettre à jour le div Render log (log utilisateur)
-            const logDiv = document.getElementById('render-log');
-            if (logDiv) {
-                logDiv.textContent = data.log || "🔄 Aucun log disponible pour le moment...";
-                logDiv.scrollTop = logDiv.scrollHeight;
-            }
-
-     // Mettre à jour le div Log système avec les logs Selenium/import
-function refreshImportLogs() {
-    fetch('/get_import_log')
-        .then(response => response.json())
-        .then(data => {
-            const sysLogDiv = document.getElementById('system-log');
-            if (sysLogDiv) {
-                // data.log contient le texte du log
-                sysLogDiv.textContent = data.log || "🔄 Aucun log disponible pour le moment...";
-                sysLogDiv.scrollTop = sysLogDiv.scrollHeight;  // scroll automatique en bas
-            }
-        })
-        .catch(err => console.error("Erreur récupération logs:", err));
-}
-
-// Rafraîchir toutes les 3 secondes
-setInterval(refreshImportLogs, 3000);
-refreshImportLogs();  // premier affichage immédiat
-</script>
-
-
-
 
         {% if not connected %}
             <div class="text-center">
@@ -211,28 +71,11 @@ refreshImportLogs();  // premier affichage immédiat
             <!-- Étape 2 : Importer un CSV sur e-Vend -->
             <div class="mb-4">
                 <h2 class="h5 text-secondary" style="font-weight: 900;"><strong>Étape 2: Importer un CSV sur e-Vend</strong></h2>
-                <p>Dans cette étape, vous devez importer le CSV que vous avez obtenu de eBay et préalablement vérifié dans "BROWSE". En bas, vous pourrez renseigner des valeurs par défaut à utiliser si eBay ne fournit pas certaines informations pour un article, afin d'éviter toute interruption lors du transfert vers e-Vend. Il vous sera possible de venir modifier ces valeurs plus tard sur votre compte vendeur. Votre adresse courriel ainsi que votre mot de passe sont nécessaires afin d'ajouter vos nouvelles annonces. Une fois que tout est terminé, nous vous conseillons de les changer.</p>
+                <p>Dans cette étape, vous devez importer le CSV que vous avez obtenu de eBay et préalablement vérifié dans "BROWSE". En bas, vous pourrez renseigner des valeurs par défaut à utiliser si eBay ne fournit pas certaines informations pour un article, afin d'éviter toute interruption lors du transfert vers e-Vend. Il vous sera possible de venir modifier ces valeurs plus tard sur votre compte vendeur.</p>
 
                 <form action="{{ url_for('post_evend') }}" method="post" enctype="multipart/form-data">
                     <!-- Browse CSV -->
                     <input type="file" class="form-control mb-3" name="csv_file" accept=".csv" required>
-
-                    <!-- Section Identifiants e-Vend -->
-                    <div class="alert alert-info-custom mb-3">
-                        <h6 class="fw-bold">🔑 Vos identifiants e-Vend</h6>
-
-                        <!-- Email -->
-                        <div class="mb-2">
-                            <label class="form-label">Votre email e-Vend</label>
-                            <input type="email" class="form-control" name="evend_email" placeholder="exemple@domaine.com" required>
-                        </div>
-
-                        <!-- Mot de passe -->
-                        <div class="mb-2">
-                            <label class="form-label">Votre mot de passe e-Vend</label>
-                            <input type="password" class="form-control" name="evend_password" placeholder="Votre mot de passe" required>
-                        </div>
-                    </div>
 
                     <!-- Valeurs par défaut si eBay ne fournit pas certaines infos (réordonnées) -->
                     <div class="alert alert-info-custom mb-3">
@@ -344,29 +187,14 @@ refreshImportLogs();  // premier affichage immédiat
 
                         <!-- Options de livraison -->
                         <div class="mb-2">
-                            <h6 class="fw-bold">Options de livraison</h6>
-
-                            <!-- Ramassage sur place -->
-                            <div class="form-check mb-1">
-                                <input class="form-check-input" type="checkbox" name="livraison_ramassage_check" id="livraison_ramassage_check">
-                                <label class="form-check-label" for="livraison_ramassage_check">
-                                    Ramassage sur place
-                                </label>
-                            </div>
-                            <label class="form-label">Adresse du ramassage</label>
-                            <input type="text" class="form-control mb-2" name="livraison_ramassage" placeholder="Adresse du ramassage" value="123 Rue Exemple, Montréal">
-
-                            <!-- Expédition par transporteur -->
-                            <div class="form-check mb-1">
-                                <input class="form-check-input" type="checkbox" name="livraison_expedition_check" id="livraison_expedition_check" checked>
-                                <label class="form-check-label" for="livraison_expedition_check">
-                                    Expédition par transporteur
-                                </label>
-                            </div>
-                            <label class="form-label">Frais de port pour un article</label>
-                            <input type="number" class="form-control mb-1" name="frais_port_article" value="5">
-                            <label class="form-label">Frais de port pour les articles supplémentaires</label>
-                            <input type="number" class="form-control mb-1" name="frais_port_sup" value="2">
+                            <label class="form-label">Options de livraison</label>
+                            <select class="form-select mb-1" name="livraison_type">
+                                <option selected>Ramassage sur place</option>
+                                <option>Expédition par transporteur</option>
+                            </select>
+                            <input type="text" class="form-control mb-1" name="livraison_ramassage" placeholder="Adresse du ramassage">
+                            <input type="number" class="form-control mb-1" name="frais_port_article" placeholder="Frais de port pour un article ($)">
+                            <input type="number" class="form-control mb-1" name="frais_port_sup" placeholder="Frais de port pour articles supplémentaires ($)">
                         </div>
 
                         <!-- Photo -->
@@ -432,3 +260,4 @@ refreshImportLogs();  // premier affichage immédiat
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+
