@@ -10,24 +10,24 @@ import threading
 from threading import Thread
 import selenium_runner.runner as selenium_runner
 
+import os
 
+# --- Création de l'app Flask ---
+app = Flask(__name__)
+app.secret_key = 'UN_SECRET_POUR_SESSION'  # ⚠️ change-le en prod
 
-
-
-
-
-# --- Nettoyage uploads avant lancement (safe) ---
+# --- Config Upload accessible en écriture ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
+SELENIUM_SCRIPT = os.path.join(BASE_DIR, 'evend_publish.py')
 
 # --- Log global thread-safe ---
 log_lock = threading.Lock()
 
-
-
-
+# --- Nettoyage CSV au démarrage ---
 for f in os.listdir(UPLOAD_FOLDER):
     file_path = os.path.join(UPLOAD_FOLDER, f)
     try:
@@ -45,18 +45,6 @@ for f in os.listdir(UPLOAD_FOLDER):
 
 
 
-
-# --- Création de l'app Flask ---
-app = Flask(__name__)
-app.secret_key = 'UN_SECRET_POUR_SESSION'  # ⚠️ change-le en prod
-
-# --- Config Upload accessible en écriture ---
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")  # => /opt/render/project/src/uploads
-# Si tu veux du temporaire : UPLOAD_FOLDER = os.path.join(tempfile.gettempdir(), "uploads")
-
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 # --- Ajouter log utilisateur ---
 def add_user_log_file(user_id, message):
@@ -210,11 +198,7 @@ def launch_selenium_import(user_id, file_path, env_vars):
 
 
 
-# --- Chemins relatifs pour Render ---
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
-SELENIUM_SCRIPT = os.path.join(BASE_DIR, 'evend_publish.py')
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 
 # --- eBay API PROD ---
 EBAY_CLIENT_ID = 'AlexBoss-eVendImp-PRD-bd29c22a7-4a223ad6'
