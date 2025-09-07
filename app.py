@@ -575,17 +575,20 @@ try:
     # Lancer Selenium
     launch_selenium_import(user_id, file_path, env_vars)
     
-    # Mettre à jour DB et log
-    add_import(user_id, nb_items)
-    flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
-    add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
+@app.route('/post_evend', methods=['POST'])
+def post_evend():
+    try:
+        # Mettre à jour DB et log
+        add_import(user_id, nb_items)
+        flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
+        add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
 
-except Exception as e:
-    flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
-    add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
+    except Exception as e:
+        flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
+        add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
 
-# Toujours rediriger à la fin (succès ou erreur)
-return redirect(url_for('index'))
+    # Toujours rediriger à la fin (succès ou erreur)
+    return redirect(url_for('index'))
 
 
 
