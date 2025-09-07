@@ -13,6 +13,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from pathlib import Path
+import threading
 
 # ---------------------------- Configuration ----------------------------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -33,30 +34,38 @@ LIVRAISON_RAMASSAGE_CHECK = os.environ.get("livraison_ramassage_check") == 'on'
 FRAIS_PORT_ARTICLE = float(os.environ.get("frais_port_article", "0"))
 FRAIS_PORT_SUP = float(os.environ.get("frais_port_sup", "0"))
 
-# --- DEBUG : afficher et logger les variables reçues (mot de passe masqué) ---
-def write_log(msg):
-    print(msg, flush=True)
-    try:
-        with open(LOG_FILE, 'a', encoding='utf-8') as f:
-            f.write(f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] {msg}\n")
-            f.flush()
-    except Exception as e:
-        print(f"⚠️ Impossible d'écrire dans le log: {e}", flush=True)
-
-write_log("🚀 Script démarré et prêt à traiter les CSV.")
-write_log("📥 Variables reçues pour l'import e-Vend :")
-for k in ["email","password","type_annonce","categorie","titre","description","condition","retour","garantie","prix","stock"]:
-    value = os.environ.get(k)
-    display_value = value if k != "password" else "******"
-    write_log(f"{k} = {display_value}")
-
 SESSION_MAX_AGE = 24 * 3600  # 24h
 BATCH_SIZE = 20
 
 EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
 EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
 
+# ---------------------------- LogWrapper thread-safe ----------------------------
+class LogWrapper:
+    def __init__(self, path):
+        self.path = path
+        self.lock = threading.Lock()
+
+    def write(self, text):
+        if text.strip():
+            with self.lock:
+                with open(self.path, "a", encoding="utf-8") as f:
+                    f.write(text)
+                    f.flush()
+
+    def flush(self):
+        pass
+
+log = LogWrapper(LOG_FILE)
+
 # ---------------------------- Fonctions utilitaires ----------------------------
+def write_log(msg):
+    print(msg, flush=True)
+    try:
+        log.write(f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] {msg}\n")
+    except Exception as e:
+        print(f"⚠️ Impossible d'écrire dans le log: {e}", flush=True)
+
 def cleanup_driver(driver=None):
     if driver:
         try:
@@ -226,8 +235,6 @@ def process_csv(csv_path):
     if not os.path.exists(csv_path):
         write_log(f"❌ CSV introuvable: {csv_path}")
         return
-
-    write_log(f"🗂 Traitement du CSV: {csv_path}")
     df = pd.read_csv(csv_path)
     if df.empty:
         write_log("❌ CSV vide.")
@@ -326,6 +333,7 @@ if not EVEND_EMAIL or not EVEND_PASSWORD:
     sys.exit(1)
 
 watch_folder()
+
 
 
 
