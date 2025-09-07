@@ -395,26 +395,16 @@ def fetch_active_items(oauth_token, max_items=MAX_PER_FILE):
 @app.route('/')
 def index():
     user_id = session.get('user_id')
-    user_logs = ""
+
+    # --- Logs dynamiques ---
+    # On ne lit plus directement le log ici, JS fera le fetch
+    user_logs = ""  
     system_logs = ""
-
-    # --- Logs utilisateur ---
-    if user_id:
-        log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
-        if os.path.exists(log_file):
-            with open(log_file, 'r', encoding='utf-8') as f:
-                user_logs = f.read()
-
-    # --- Logs système filtrés par utilisateur ---
-    sys_log_file = os.path.join(UPLOAD_FOLDER, "system_import_log.txt")
-    if os.path.exists(sys_log_file) and user_id:
-        with open(sys_log_file, 'r', encoding='utf-8') as f:
-            # Filtrer seulement les lignes contenant user_id
-            system_logs = "\n".join([line for line in f if user_id in line])
 
     connected = False
     today_imported = 0
     remaining_quota = 0
+
     if user_id:
         tokens = get_user_tokens(user_id)
         if tokens:
@@ -424,6 +414,7 @@ def index():
 
     return render_template(
         'index.html',
+        user_id=user_id,                 # nécessaire pour JS fetch
         connected=connected,
         today_imported=today_imported,
         remaining_quota=remaining_quota,
