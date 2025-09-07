@@ -584,7 +584,9 @@ except Exception as e:
     flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
     add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
 
-    return redirect(url_for('index'))
+# Toujours rediriger à la fin (succès ou erreur)
+return redirect(url_for('index'))
+
 
 
 
