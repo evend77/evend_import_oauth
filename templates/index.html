@@ -44,7 +44,6 @@
         🔄 Les logs d'import s'afficheront ici...
     </div>
 </div>
-
 <!-- Bloc LOG Selenium -->
 <div class="alert alert-info-custom mt-3">
     <h5 class="fw-bold text-center mb-2">LOG Selenium :</h5>
@@ -66,6 +65,26 @@ function refreshAllLogs() {
             }
         })
         .catch(err => console.error("Erreur récupération logs import:", err));
+
+    // --- Log Selenium ---
+    fetch("/get_selenium_log")
+        .then(response => response.json())
+        .then(data => {
+            const logDiv = document.getElementById('selenium-log');
+            if (logDiv) {
+                logDiv.textContent = data.log || "🔄 Aucun log Selenium pour le moment...";
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+        })
+        .catch(err => console.error("Erreur récupération logs Selenium:", err));
+}
+
+// Rafraîchissement toutes les 3 secondes
+setInterval(refreshAllLogs, 3000);
+refreshAllLogs();  // affichage immédiat
+</script>
+
+{% endwith %}
 
     // --- Log Selenium ---
     fetch("/get_selenium_log")
