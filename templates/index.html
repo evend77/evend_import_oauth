@@ -23,26 +23,23 @@
             ⚠️ Veuillez vous connecter à votre compte e-Vend avant de lancer la procédure.
         </div>
 
-        <!-- Bloc regroupé messages + connecté eBay -->
+        <!-- Bloc messages flash + connecté eBay -->
         {% with messages = get_flashed_messages() %}
         {% if messages or connected %}
             <div class="alert-info-custom">
                 {% if messages %}
                     <h5 class="fw-bold text-center mb-3">Messages</h5>
+                    <ul>
+                        {% for message in messages %}
+                            <li>{{ message }}</li>
+                        {% endfor %}
+                    </ul>
                 {% endif %}
                 {% if connected %}
                     <div class="alert-success-custom text-center fw-bold">
                         ✅ Vous êtes connecté à eBay !
                     </div>
                 {% endif %}
-                <!-- UL pour les logs live -->
-                <ul id="import-log" style="max-height: 200px; overflow-y: auto; padding-left: 20px; margin-top: 10px;">
-                    {% if messages %}
-                        {% for message in messages %}
-                            <li>{{ message }}</li>
-                        {% endfor %}
-                    {% endif %}
-                </ul>
 
                 <!-- Bloc logs Render pour cet utilisateur -->
                 <div class="alert alert-info-custom mt-3">
@@ -57,40 +54,24 @@
         {% endwith %}
 
         <!-- Script pour rafraîchir les logs d'import en quasi temps réel -->
-  <script>
-function refreshAllLogs() {
-    fetch("/get_import_log")
-        .then(response => response.json())
-        .then(data => {
-            // Mettre à jour les messages UL
-            const messagesUl = document.getElementById('import-log');
-            if (messagesUl) {
-                messagesUl.innerHTML = '';
-                data.log.split('\n').forEach(line => {
-                    if (line.trim() !== '') {
-                        const li = document.createElement('li');
-                        li.textContent = line;
-                        messagesUl.appendChild(li);
+        <script>
+        function refreshAllLogs() {
+            fetch("/get_import_log")
+                .then(response => response.json())
+                .then(data => {
+                    // Mettre à jour le div Render log
+                    const logDiv = document.getElementById('render-log');
+                    if (logDiv) {
+                        logDiv.textContent = data.log || "🔄 Aucun log disponible pour le moment...";
+                        logDiv.scrollTop = logDiv.scrollHeight;
                     }
-                });
-                messagesUl.scrollTop = messagesUl.scrollHeight;
-            }
+                })
+                .catch(err => console.error("Erreur récupération logs:", err));
+        }
 
-            // Mettre à jour le div Render log
-            const logDiv = document.getElementById('render-log');
-            if (logDiv) {
-                logDiv.textContent = data.log || "🔄 Aucun log disponible pour le moment...";
-                logDiv.scrollTop = logDiv.scrollHeight;
-            }
-        })
-        .catch(err => console.error("Erreur récupération logs:", err));
-}
-
-// Rafraîchir toutes les 3 secondes
-setInterval(refreshAllLogs, 3000);
-refreshAllLogs();  // premier affichage immédiat
-</script>
-
+        setInterval(refreshAllLogs, 3000);
+        refreshAllLogs();  // premier affichage immédiat
+        </script>
 
         {% if not connected %}
             <div class="text-center">
@@ -100,6 +81,7 @@ refreshAllLogs();  // premier affichage immédiat
                 </a>
             </div>
         {% else %}
+
             <!-- Étape 1 : Télécharger vos annonces eBay -->
             <div class="mb-4">
                 <h2 class="h5 text-secondary" style="font-weight: 900;"><strong>Étape 1: Télécharger vos annonces eBay</strong></h2>
@@ -128,25 +110,19 @@ refreshAllLogs();  // premier affichage immédiat
                     <!-- Section Identifiants e-Vend -->
                     <div class="alert alert-info-custom mb-3">
                         <h6 class="fw-bold">🔑 Vos identifiants e-Vend</h6>
-
-                        <!-- Email -->
                         <div class="mb-2">
                             <label class="form-label">Votre email e-Vend</label>
                             <input type="email" class="form-control" name="evend_email" placeholder="exemple@domaine.com" required>
                         </div>
-
-                        <!-- Mot de passe -->
                         <div class="mb-2">
                             <label class="form-label">Votre mot de passe e-Vend</label>
                             <input type="password" class="form-control" name="evend_password" placeholder="Votre mot de passe" required>
                         </div>
                     </div>
 
-                    <!-- Valeurs par défaut si eBay ne fournit pas certaines infos (réordonnées) -->
+                    <!-- Valeurs par défaut -->
                     <div class="alert alert-info-custom mb-3">
                         <h6 class="fw-bold">Valeurs par défaut (si eBay ne fournit pas)</h6>
-
-                        <!-- Type d'annonce -->
                         <div class="mb-2">
                             <label class="form-label">Type d’annonce</label>
                             <select class="form-select" name="type_annonce">
@@ -155,8 +131,6 @@ refreshAllLogs();  // premier affichage immédiat
                                 <option>Article remis à neuf</option>
                             </select>
                         </div>
-
-                        <!-- Catégorie -->
                         <div class="mb-2">
                             <label class="form-label">Catégorie</label>
                             <select class="form-select" name="categorie">
@@ -192,19 +166,15 @@ refreshAllLogs();  // premier affichage immédiat
                             </select>
                         </div>
 
-                        <!-- Titre de l'annonce -->
+                        <!-- Titre, Description, Condition, Retour, Garantie, Prix, Stock -->
                         <div class="mb-2">
                             <label class="form-label">Titre de l'annonce</label>
-                            <input type="text" class="form-control" name="titre" placeholder="Ex : Magnifique montre vintage" value="">
+                            <input type="text" class="form-control" name="titre" placeholder="Ex : Magnifique montre vintage">
                         </div>
-
-                        <!-- Descriptif -->
                         <div class="mb-2">
                             <label class="form-label">Descriptif de l'annonce</label>
                             <textarea class="form-control" name="description" placeholder="Décrivez votre article ici..."></textarea>
                         </div>
-
-                        <!-- État de l'article -->
                         <div class="mb-2">
                             <label class="form-label">État de l'article (condition)</label>
                             <select class="form-select" name="condition">
@@ -218,8 +188,6 @@ refreshAllLogs();  // premier affichage immédiat
                                 <option>8. Pour pièces – Non fonctionnel, vendu pour récupérer des pièces</option>
                             </select>
                         </div>
-
-                        <!-- Retour offert -->
                         <div class="mb-2">
                             <label class="form-label">Retour offert</label>
                             <select class="form-select" name="retour">
@@ -227,8 +195,6 @@ refreshAllLogs();  // premier affichage immédiat
                                 <option>Oui, retour sous 30 jours après date d'achat</option>
                             </select>
                         </div>
-
-                        <!-- Garantie -->
                         <div class="mb-2">
                             <label class="form-label">Garantie offerte</label>
                             <select class="form-select" name="garantie">
@@ -237,14 +203,10 @@ refreshAllLogs();  // premier affichage immédiat
                                 <option>Oui, une garantie est offerte (détails dans description)</option>
                             </select>
                         </div>
-
-                        <!-- Prix -->
                         <div class="mb-2">
                             <label class="form-label">Prix ($) -minimun 5$</label>
                             <input type="number" class="form-control" name="prix" value="5" min="0">
                         </div>
-
-                        <!-- Stock -->
                         <div class="mb-2">
                             <label class="form-label">Stock</label>
                             <input type="number" class="form-control" name="stock" value="1" min="1">
@@ -253,23 +215,16 @@ refreshAllLogs();  // premier affichage immédiat
                         <!-- Options de livraison -->
                         <div class="mb-2">
                             <h6 class="fw-bold">Options de livraison</h6>
-
-                            <!-- Ramassage sur place -->
                             <div class="form-check mb-1">
                                 <input class="form-check-input" type="checkbox" name="livraison_ramassage_check" id="livraison_ramassage_check">
-                                <label class="form-check-label" for="livraison_ramassage_check">
-                                    Ramassage sur place
-                                </label>
+                                <label class="form-check-label" for="livraison_ramassage_check">Ramassage sur place</label>
                             </div>
                             <label class="form-label">Adresse du ramassage</label>
-                            <input type="text" class="form-control mb-2" name="livraison_ramassage" placeholder="Adresse du ramassage" value="123 Rue Exemple, Montréal">
+                            <input type="text" class="form-control mb-2" name="livraison_ramassage" value="123 Rue Exemple, Montréal">
 
-                            <!-- Expédition par transporteur -->
                             <div class="form-check mb-1">
                                 <input class="form-check-input" type="checkbox" name="livraison_expedition_check" id="livraison_expedition_check" checked>
-                                <label class="form-check-label" for="livraison_expedition_check">
-                                    Expédition par transporteur
-                                </label>
+                                <label class="form-check-label" for="livraison_expedition_check">Expédition par transporteur</label>
                             </div>
                             <label class="form-label">Frais de port pour un article</label>
                             <input type="number" class="form-control mb-1" name="frais_port_article" value="5">
@@ -284,36 +239,24 @@ refreshAllLogs();  // premier affichage immédiat
                         </div>
                     </div>
 
-                    <!-- Bouton importer -->
-                    <button type="submit" class="btn btn-success btn-lg w-100 mb-3">
-                        📤 Importer sur e-Vend
-                    </button>
-
-                    <!-- Texte explicatif pour options supplémentaires -->
+                    <button type="submit" class="btn btn-success btn-lg w-100 mb-3">📤 Importer sur e-Vend</button>
                     <p class="text-center text-muted mb-2"><em>Options supplémentaires / outils de gestion</em></p>
-
-                    <!-- Séparation visuelle pour options supplémentaires -->
                     <hr class="my-4 border border-secondary border-2 rounded">
-
                 </form>
 
             <!-- Réinitialiser le dernier CSV eBay -->
             <div class="mb-4">
                 <h2 class="h5 text-secondary" style="font-weight: 900;"><strong>🧹 Réinitialiser le dernier CSV eBay</strong></h2>
                 <form action="{{ url_for('reset_csv') }}" method="post">
-                    <button type="submit" class="btn btn-warning btn-lg w-100">
-                        🔄 Supprimer le dernier CSV
-                    </button>
+                    <button type="submit" class="btn btn-warning btn-lg w-100">🔄 Supprimer le dernier CSV</button>
                 </form>
             </div>
 
-            <!-- Déconnexion eBay avec titre -->
+            <!-- Déconnexion eBay -->
             <div class="mb-4">
                 <h2 class="h5 text-secondary" style="font-weight: 900;"><strong>🔓 Vous pouvez vous déconnecter de eBay ici</strong></h2>
                 <div class="text-center">
-                    <a href="{{ url_for('logout_ebay') }}" class="btn btn-danger btn-lg w-100 mt-2">
-                        🔓 Se déconnecter de eBay
-                    </a>
+                    <a href="{{ url_for('logout_ebay') }}" class="btn btn-danger btn-lg w-100 mt-2">🔓 Se déconnecter de eBay</a>
                 </div>
             </div>
 
@@ -340,5 +283,6 @@ refreshAllLogs();  // premier affichage immédiat
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+
 
 
