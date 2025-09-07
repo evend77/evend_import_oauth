@@ -51,67 +51,28 @@ def add_user_log_file(user_id, message):
     except Exception as e:
         print(f"❌ Impossible d'écrire dans le log {log_file}: {e}")
 
-
-# --- Nouveau log centralisé pour erreurs et événements ---
-def log_event(user_id, message, is_error=False):
-    """
-    Log les événements utilisateur et les erreurs système.
-    - user_id peut être 'system' pour les erreurs globales.
-    """
-    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
-    prefix = "❌ " if is_error else "ℹ️ "
-    try:
-        with open(log_file, 'a', encoding='utf-8') as f:
-            f.write(f"[{datetime.utcnow().isoformat()}] {prefix}{message}\n")
-    except Exception as e:
-        print(f"❌ Impossible de logger {message} : {e}")
-
-
-
-
-
-
-
-# --- Nouvelle route pour lire les logs Selenium / import (robuste) ---
+# --- Nouvelle route pour lire les logs ---
 @app.route('/get_import_log')
 def get_import_log():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"log": "⚠️ Session expirée ou utilisateur non identifié."})
+
+    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
+    if not os.path.exists(log_file):
+        open(log_file, 'a').close()
+        return jsonify({"log": "ℹ️ Log créé, en attente d’événements..."})
+
     try:
-        user_id = session.get('user_id')
-        if not user_id:
-            return jsonify({"log": ["⚠️ Session expirée ou utilisateur non identifié."]})
-
-        # Vérifie si le dossier existe
-        if not os.path.exists(UPLOAD_FOLDER):
-            os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-        log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
-
-        # Crée le fichier s'il n'existe pas
-        if not os.path.exists(log_file):
-            open(log_file, 'a').close()
-            return jsonify({"log": ["ℹ️ Log créé, en attente d’événements..."]})
-
-        # Lecture du fichier log
-        try:
-            with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
-                lines = f.readlines()[-1000:]  # récupère les 1000 dernières lignes
-                lines = [line.strip() for line in lines if line.strip()]
-        except Exception as e:
-            lines = [f"❌ Impossible de lire le fichier de log: {e}"]
-
-        return jsonify({"log": lines})
-
+        with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+            f.seek(0, 2)  # aller à la fin
+            size = f.tell()
+            f.seek(max(size - 5000, 0))  # lire seulement les 5000 derniers caractères
+            logs = f.read()
     except Exception as e:
-        # Si quelque chose d’inattendu se produit
-        system_log_file = os.path.join(UPLOAD_FOLDER, "system_import_log.txt")
-        try:
-            with open(system_log_file, 'a', encoding='utf-8') as f:
-                f.write(f"[{datetime.utcnow().isoformat()}] ❌ Erreur critique get_import_log: {e}\n")
-        except:
-            pass
-        return jsonify({"log": [f"❌ Une erreur inattendue est survenue: {e}"]})
+        logs = f"❌ Impossible de lire le fichier de log: {e}"
 
-
+    return jsonify({"log": logs})
 
 
 # --- Vérification au lancement ---
@@ -395,33 +356,19 @@ def fetch_active_items(oauth_token, max_items=MAX_PER_FILE):
 @app.route('/')
 def index():
     user_id = session.get('user_id')
-
-    # --- Logs dynamiques ---
-    # On ne lit plus directement le log ici, JS fera le fetch
-    user_logs = ""  
-    system_logs = ""
-
     connected = False
     today_imported = 0
     remaining_quota = 0
-
     if user_id:
         tokens = get_user_tokens(user_id)
         if tokens:
             connected = True
             today_imported = get_import_count_today(user_id)
             remaining_quota = max(0, MAX_PER_DAY - today_imported)
-
-    return render_template(
-        'index.html',
-        user_id=user_id,                 # nécessaire pour JS fetch
-        connected=connected,
-        today_imported=today_imported,
-        remaining_quota=remaining_quota,
-        user_logs=user_logs,
-        system_logs=system_logs
-    )
-
+    return render_template('index.html',
+                           connected=connected,
+                           today_imported=today_imported,
+                           remaining_quota=remaining_quota)
 
 # --- OAuth eBay ---
 @app.route('/login_ebay')
@@ -499,25 +446,8 @@ def download_ebay_csv():
     flash(f"✅ CSV eBay prêt avec {len(df)} annonces.")
     return send_file(csv_path, as_attachment=True, download_name="csv_ebay_pret.csv", mimetype="text/csv")
 
-# --- LogWrapper thread-safe pour import individuel ---
-import threading
+# --- Import e-Vend ---
 
-class LogWrapper:
-    def __init__(self, path):
-        self.path = path
-        self.lock = threading.Lock()
-
-    def write(self, text):
-        if text.strip():
-            with self.lock:
-                with open(self.path, "a", encoding="utf-8") as f:
-                    f.write(text)
-
-    def flush(self):
-        pass
-
-
-# --- Route post_evend avec log unique par import ---
 @app.route('/post_evend', methods=['GET', 'POST'])
 def post_evend():
     if request.method == 'GET':
@@ -533,13 +463,14 @@ def post_evend():
         flash("⚠️ Connecte d’abord ton compte eBay.")
         return redirect(url_for('login_ebay'))
 
-    # --- CSV upload ou dernier CSV ---
+    # --- Vérifier si un nouveau fichier CSV est uploadé ---
     file = request.files.get('csv_file')
     if file and file.filename != '':
         safe_filename = f"csv_ebay_import_{uuid.uuid4().hex}.csv"
         file_path = os.path.join(UPLOAD_FOLDER, safe_filename)
         file.save(file_path)
         set_last_csv_path(user_id, file_path)
+        # Ajouter une séparation dans le log pour ce nouvel import
         add_user_log_file(user_id, "-------------------- NOUVEL IMPORT --------------------")
         add_user_log_file(user_id, f"📂 Fichier {file.filename} reçu et sauvegardé sous {safe_filename}")
     else:
@@ -560,7 +491,7 @@ def post_evend():
         add_user_log_file(user_id, f"❌ CSV invalide : {e}")
         return redirect(url_for('index'))
 
-    # --- Quota journalier ---
+    # --- Vérifier quota journalier ---
     today_imported = get_import_count_today(user_id)
     remaining_quota = max(0, MAX_PER_DAY - today_imported)
     if nb_items > remaining_quota:
@@ -568,59 +499,68 @@ def post_evend():
         add_user_log_file(user_id, f"⚠️ Import annulé : quota restant {remaining_quota}, fichier {nb_items}")
         return redirect(url_for('index'))
 
-    # --- Variables pour Selenium ---
+    # --- Préparer les variables d'environnement pour Selenium ---
     env_vars = os.environ.copy()
-    env_vars.update({
-        "email": request.form.get("evend_email", ""),
-        "password": request.form.get("evend_password", ""),
-        "type_annonce": request.form.get("type_annonce", ""),
-        "categorie": request.form.get("categorie", ""),
-        "titre": request.form.get("titre", ""),
-        "description": request.form.get("description", ""),
-        "condition": request.form.get("condition", ""),
-        "retour": request.form.get("retour", ""),
-        "garantie": request.form.get("garantie", ""),
-        "prix": request.form.get("prix", ""),
-        "stock": request.form.get("stock", ""),
-        "frais_port_article": request.form.get("frais_port_article", ""),
-        "frais_port_sup": request.form.get("frais_port_sup", ""),
-        "photo_defaut": request.form.get("photo_defaut", ""),
-        "livraison_ramassage_check": "on" if request.form.get("livraison_ramassage_check") else "",
-        "livraison_expedition_check": "on" if request.form.get("livraison_expedition_check") else "",
-        "livraison_ramassage": request.form.get("livraison_ramassage", "")
-    })
-
-    # --- Log unique par import ---
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    import_log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_{timestamp}.log")
-    add_user_log_file(user_id, f"🚀 Import lancé, log individuel créé : {import_log_file}")
+    env_vars["email"] = request.form.get("evend_email", "")
+    env_vars["password"] = request.form.get("evend_password", "")
+    env_vars["type_annonce"] = request.form.get("type_annonce", "")
+    env_vars["categorie"] = request.form.get("categorie", "")
+    env_vars["titre"] = request.form.get("titre", "")
+    env_vars["description"] = request.form.get("description", "")
+    env_vars["condition"] = request.form.get("condition", "")
+    env_vars["retour"] = request.form.get("retour", "")
+    env_vars["garantie"] = request.form.get("garantie", "")
+    env_vars["prix"] = request.form.get("prix", "")
+    env_vars["stock"] = request.form.get("stock", "")
+    env_vars["frais_port_article"] = request.form.get("frais_port_article", "")
+    env_vars["frais_port_sup"] = request.form.get("frais_port_sup", "")
+    env_vars["photo_defaut"] = request.form.get("photo_defaut", "")
+    env_vars["livraison_ramassage_check"] = "on" if request.form.get("livraison_ramassage_check") else ""
+    env_vars["livraison_expedition_check"] = "on" if request.form.get("livraison_expedition_check") else ""
+    env_vars["livraison_ramassage"] = request.form.get("livraison_ramassage", "")
 
     # --- Lancer Selenium en arrière-plan ---
     try:
-        wrapper = LogWrapper(import_log_file)
+        log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
+        add_user_log_file(user_id, f"🚀 Lancement Selenium pour {nb_items} articles depuis {file_path}")
 
-        def run_selenium():
-            subprocess.Popen(
-                ['python3', '-u', SELENIUM_SCRIPT, file_path],  # -u = mode unbuffered
-                env=env_vars,
-                stdout=wrapper,
-                stderr=wrapper,
-                bufsize=1,                  # line-buffered
-                universal_newlines=True,    # texte au lieu de bytes
-                start_new_session=True
-            )
-
-        threading.Thread(target=run_selenium, daemon=True).start()
+        subprocess.Popen(
+            ['python3', SELENIUM_SCRIPT, file_path],
+            env=env_vars,
+            stdout=open(log_file, 'a'),
+            stderr=open(log_file, 'a'),
+            start_new_session=True
+        )
         add_import(user_id, nb_items)
-        flash(f"✅ Import lancé en arrière-plan ({nb_items} articles). Log séparé créé.")
-        add_user_log_file(user_id, f"✅ Import démarré avec {nb_items} articles, fichier log : {import_log_file}")
-
+        flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
+        add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
     except Exception as e:
-        flash(f"❌ Impossible de lancer l'import : {e}")
+        flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
         add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
 
     return redirect(url_for('index'))
 
+
+# --- Réinitialiser dernier CSV ---
+@app.route('/reset_csv', methods=['GET', 'POST'])
+def reset_csv():
+    if request.method == 'GET':
+        return redirect(url_for('index'))
+
+    user_id = session.get('user_id')
+    if not user_id:
+        flash("⚠️ Session expirée.")
+        return redirect(url_for('index'))
+
+    last_csv = get_last_csv_path(user_id)
+    if last_csv and os.path.exists(last_csv):
+        os.remove(last_csv)
+        set_last_csv_path(user_id, None)
+        flash("🧹 Dernier CSV eBay supprimé.")
+    else:
+        flash("ℹ️ Aucun CSV précédent à supprimer.")
+
+    return redirect(url_for('index'))
 
 
 
@@ -701,24 +641,3 @@ def view_account_deletion_history():
         return f"<pre>{content}</pre>"
     else:
         return "⚠️ Aucun historique trouvé."
-
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    """
-    Capture toutes les erreurs non gérées et les logue dans le fichier 'system'.
-    """
-    log_event('system', f"Erreur critique: {e}", is_error=True)
-    return "❌ Une erreur est survenue. Vérifie les logs.", 500
-
-
-
-
-
-
-# --- RUN SERVER ---
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))  # Render fournit le PORT
-    # debug=False pour sécuriser la production
-    app.run(host="0.0.0.0", port=port, debug=False)
-
