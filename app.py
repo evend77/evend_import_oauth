@@ -179,20 +179,36 @@ except Exception as e:
 # 🔹 LANCEMENT SELENIUM IMPORT
 # =====================================================
 def launch_selenium_import(user_id, file_path, env_vars):
-    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
+    """
+    Lance le script Selenium pour publier les articles e-Vend.
+    - Les messages de suivi (démarrage, succès, erreurs) vont dans le log import.
+    - Tout ce que produit Selenium (stdout/stderr) va dans le log Selenium.
+    """
+    import_log = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
+    selenium_log = os.path.join(UPLOAD_FOLDER, f"{user_id}_selenium_log.txt")
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
     try:
-        with open(log_file, 'a', encoding='utf-8') as f:
+        # Log import → juste pour notifier le lancement
+        add_user_log_file(user_id, f"🚀 Lancement Selenium pour {file_path}")
+
+        # Lancer le script Selenium en arrière-plan
+        with open(selenium_log, 'a', encoding='utf-8') as f_selenium:
             subprocess.Popen(
                 ['python3', SELENIUM_SCRIPT, file_path],
                 env=env_vars,
-                stdout=f,
-                stderr=f,
-                start_new_session=True
+                stdout=f_selenium,
+                stderr=f_selenium,
+                start_new_session=True  # détache le processus du serveur Flask
             )
+
+        # Confirmation dans log import
         add_user_log_file(user_id, f"✅ Import lancé pour {file_path}")
+
     except Exception as e:
+        # Si le lancement échoue, on l'écrit dans le log import
         add_user_log_file(user_id, f"❌ Impossible de lancer l'import Selenium: {e}")
+
 
 
 
