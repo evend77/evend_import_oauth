@@ -562,24 +562,27 @@ def post_evend():
     env_vars["livraison_expedition_check"] = "on" if request.form.get("livraison_expedition_check") else ""
     env_vars["livraison_ramassage"] = request.form.get("livraison_ramassage", "")
 
-    # --- Lancer Selenium en arrière-plan ---
-    try:
-        log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
-        add_user_log_file(user_id, f"🚀 Lancement Selenium pour {nb_items} articles depuis {file_path}")
+   # --- Lancer Selenium en arrière-plan avec log en temps réel ---
+try:
+    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
+    add_user_log_file(user_id, f"🚀 Lancement Selenium pour {nb_items} articles depuis {file_path}")
 
-        subprocess.Popen(
-            ['python3', SELENIUM_SCRIPT, file_path],
-            env=env_vars,
-            stdout=open(log_file, 'a'),
-            stderr=open(log_file, 'a'),
-            start_new_session=True
-        )
-        add_import(user_id, nb_items)
-        flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
-        add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
-    except Exception as e:
-        flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
-        add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
+    from log_wrapper import LogWrapper
+    wrapper = LogWrapper(log_file)
+
+    subprocess.Popen(
+        ['python3', SELENIUM_SCRIPT, file_path],
+        env=env_vars,
+        stdout=wrapper,
+        stderr=wrapper,
+        start_new_session=True
+    )
+    add_import(user_id, nb_items)
+    flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
+    add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
+except Exception as e:
+    flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
+    add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
 
     return redirect(url_for('index'))
 
