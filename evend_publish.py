@@ -28,8 +28,9 @@ SESSION_FILE = os.path.join(UPLOAD_FOLDER, f"session_{USER_ID}.json")
 QUEUE_FILE = os.path.join(UPLOAD_FOLDER, "evend_publish_queue.json")
 PROGRESS_FILE = os.path.join(UPLOAD_FOLDER, f"progress_{USER_ID}.txt")
 
-EVEND_EMAIL = os.environ.get("email")
-EVEND_PASSWORD = os.environ.get("password")
+EVEND_EMAIL = os.environ.get("EVEND_EMAIL")
+EVEND_PASSWORD = os.environ.get("EVEND_PASSWORD")
+
 LIVRAISON_RAMASSAGE_CHECK = os.environ.get("livraison_ramassage_check") == 'on'
 FRAIS_PORT_ARTICLE = float(os.environ.get("frais_port_article", "0"))
 FRAIS_PORT_SUP = float(os.environ.get("frais_port_sup", "0"))
