@@ -607,18 +607,28 @@ def post_evend():
         add_user_log_file(user_id, f"⚠️ Import annulé : quota restant {remaining_quota}, fichier {nb_items}")
         return redirect(url_for('index'))
 
-    # --- Préparer les variables d'environnement pour Selenium ---
-    env_vars = os.environ.copy()
-    form_keys = [
-        "evend_email", "evend_password", "type_annonce", "categorie", "titre", "description",
-        "condition", "retour", "garantie", "prix", "stock", "frais_port_article", "frais_port_sup",
-        "photo_defaut", "livraison_ramassage_check", "livraison_expedition_check", "livraison_ramassage"
-    ]
-    for key in form_keys:
-        env_vars[key] = request.form.get(key, "")
 
-    env_vars["livraison_ramassage_check"] = "on" if request.form.get("livraison_ramassage_check") else ""
-    env_vars["livraison_expedition_check"] = "on" if request.form.get("livraison_expedition_check") else ""
+
+# --- Préparer les variables d'environnement pour Selenium ---
+env_vars = os.environ.copy()
+
+# ⚠️ Attention : Selenium attend EVEND_EMAIL et EVEND_PASSWORD
+env_vars["EVEND_EMAIL"] = request.form.get("evend_email", "")
+env_vars["EVEND_PASSWORD"] = request.form.get("evend_password", "")
+
+# Autres variables pour le formulaire
+form_keys = [
+    "type_annonce", "categorie", "titre", "description",
+    "condition", "retour", "garantie", "prix", "stock",
+    "frais_port_article", "frais_port_sup", "photo_defaut",
+    "livraison_ramassage_check", "livraison_expedition_check", "livraison_ramassage"
+]
+for key in form_keys:
+    env_vars[key] = request.form.get(key, "")
+
+env_vars["livraison_ramassage_check"] = "on" if request.form.get("livraison_ramassage_check") else ""
+env_vars["livraison_expedition_check"] = "on" if request.form.get("livraison_expedition_check") else ""
+
 
     # --- Lancer Selenium en arrière-plan et mettre à jour DB/log ---
     try:
