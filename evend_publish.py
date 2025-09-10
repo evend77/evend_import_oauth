@@ -96,14 +96,20 @@ def get_driver():
     chrome_options.add_argument("--disable-web-security")
     chrome_options.add_argument("--ignore-certificate-errors")
     chrome_options.add_argument("--allow-running-insecure-content")
-    chrome_options.add_experimental_option("prefs", {"profile.managed_default_content_settings.images": 2})
+    chrome_options.add_experimental_option(
+        "prefs", {"profile.managed_default_content_settings.images": 2}
+    )
+    
     try:
         driver = webdriver.Chrome(options=chrome_options)
-        write_log("✅ Driver Selenium initialisé")
+        # Timeout global pour charger la page (en secondes)
+        driver.set_page_load_timeout(15)
+        write_log("✅ Driver Selenium initialisé avec timeout global 15s")
         return driver
     except Exception as e:
         write_log(f"❌ Impossible d'initialiser le driver Selenium: {e}")
         raise
+
 
 # =====================================================
 # Nettoyage driver
