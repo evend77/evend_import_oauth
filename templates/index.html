@@ -87,8 +87,8 @@ document.getElementById("cancel-btn").addEventListener("click", () => {
 
         <!-- Script pour rafraîchir les logs d'import en quasi temps réel -->
 <script>
-function refreshAllLogs() {
-    // LOG import
+// Rafraîchissement logs import et Selenium
+function refreshImportLog() {
     fetch("/get_import_log")
         .then(response => response.json())
         .then(data => {
@@ -99,26 +99,30 @@ function refreshAllLogs() {
             }
         })
         .catch(err => console.error("Erreur récupération logs import:", err));
+}
 
-<script>
-    // LOG Selenium
-    function refreshSeleniumLog() {
-        fetch("/get_selenium_log")
-            .then(response => response.json())
-            .then(data => {
-                const logDiv = document.getElementById('selenium-log');
-                if (logDiv) {
-                    logDiv.textContent = data.log || "🔄 Aucun log Selenium pour le moment...";
-                    logDiv.scrollTop = logDiv.scrollHeight;
-                }
-            })
-            .catch(err => console.error("Erreur récupération logs Selenium:", err));
-    }
+function refreshSeleniumLog() {
+    fetch("/get_selenium_log")
+        .then(response => response.json())
+        .then(data => {
+            const logDiv = document.getElementById('selenium-log');
+            if (logDiv) {
+                logDiv.textContent = data.log || "🔄 Aucun log Selenium pour le moment...";
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+        })
+        .catch(err => console.error("Erreur récupération logs Selenium:", err));
+}
 
-    // Rafraîchissement toutes les 3 secondes
-    setInterval(refreshSeleniumLog, 3000);
-    refreshSeleniumLog();  // affichage immédiat
+// Rafraîchissement toutes les 3 secondes
+setInterval(refreshImportLog, 3000);
+setInterval(refreshSeleniumLog, 3000);
+
+// Affichage immédiat au chargement
+refreshImportLog();
+refreshSeleniumLog();
 </script>
+
 
 
 
