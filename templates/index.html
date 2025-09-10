@@ -41,21 +41,32 @@
     {% endif %}
 </div>
 
-<!-- Bloc logs Render -->
-<div class="alert alert-info-custom mt-3">
-    <h5 class="fw-bold text-center mb-2">LOG import :</h5>
+<!-- Bloc logs import + bouton copier -->
+<div class="alert alert-info-custom mt-3 position-relative">
+    <h5 class="fw-bold text-center mb-2">
+        LOG import :
+        <button class="btn btn-sm btn-outline-secondary float-end" style="font-size:0.8rem;" onclick="copyToClipboard('render-log')">
+            📋 Copier les codes
+        </button>
+    </h5>
     <div id="render-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
         🔄 Les logs d'import s'afficheront ici...
     </div>
 </div>
 
-<!-- Bloc LOG Selenium -->
-<div class="alert alert-info-custom mt-3">
-    <h5 class="fw-bold text-center mb-2">LOG Selenium :</h5>
+<!-- Bloc logs Selenium + bouton copier -->
+<div class="alert alert-info-custom mt-3 position-relative">
+    <h5 class="fw-bold text-center mb-2">
+        LOG Selenium :
+        <button class="btn btn-sm btn-outline-secondary float-end" style="font-size:0.8rem;" onclick="copyToClipboard('selenium-log')">
+            📋 Copier les codes
+        </button>
+    </h5>
     <div id="selenium-log" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto; background: #f0f8ff; padding: 10px; border-radius: 8px;">
         🔄 Les logs Selenium s'afficheront ici...
     </div>
 </div>
+
 {% endif %}
 {% endwith %}
 
@@ -332,6 +343,16 @@ refreshSeleniumLog();
         {% endif %}
     </div>
 </div>
+
+<script>
+function copyToClipboard(elementId) {
+    const text = document.getElementById(elementId).textContent;
+    navigator.clipboard.writeText(text)
+        .then(() => alert("✅ Log copié dans le presse-papier !"))
+        .catch(err => console.error("Erreur copie :", err));
+}
+</script>
+    
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
