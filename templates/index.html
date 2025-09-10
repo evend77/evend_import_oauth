@@ -76,23 +76,27 @@ function refreshAllLogs() {
         })
         .catch(err => console.error("Erreur récupération logs import:", err));
 
+<script>
     // LOG Selenium
-    fetch("/get_selenium_log")
-        .then(response => response.json())
-        .then(data => {
-            const logDiv = document.getElementById('selenium-log');
-            if (logDiv) {
-                logDiv.textContent = data.log || "🔄 Aucun log Selenium pour le moment...";
-                logDiv.scrollTop = logDiv.scrollHeight;
-            }
-        })
-        .catch(err => console.error("Erreur récupération logs Selenium:", err));
-}
+    function refreshSeleniumLog() {
+        fetch("/get_selenium_log")
+            .then(response => response.json())
+            .then(data => {
+                const logDiv = document.getElementById('selenium-log');
+                if (logDiv) {
+                    logDiv.textContent = data.log || "🔄 Aucun log Selenium pour le moment...";
+                    logDiv.scrollTop = logDiv.scrollHeight;
+                }
+            })
+            .catch(err => console.error("Erreur récupération logs Selenium:", err));
+    }
 
-// Rafraîchissement toutes les 3 secondes
-setInterval(refreshAllLogs, 3000);
-refreshAllLogs();  // affichage immédiat
+    // Rafraîchissement toutes les 3 secondes
+    setInterval(refreshSeleniumLog, 3000);
+    refreshSeleniumLog();  // affichage immédiat
 </script>
+
+
 
         {% if not connected %}
             <div class="text-center">
