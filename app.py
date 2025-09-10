@@ -176,46 +176,52 @@ except Exception as e:
 
 
 # =====================================================
-# 🔹 LANCEMENT SELENIUM IMPORT
+# 🔹 LANCEMENT SELENIUM IMPORT - VERSION SÛRE LOG
 # =====================================================
 def launch_selenium_import(user_id, file_path, env_vars):
     """
     Lance le script Selenium pour publier les articles e-Vend.
-    
-    Fonctionnement :
-    - Les messages de suivi (démarrage, succès, erreurs) vont dans le log import.
-    - Tout ce que produit Selenium (stdout/stderr) va dans le log Selenium.
-    - Le script Selenium est lancé en arrière-plan, détaché du serveur Flask.
+    - Tout stdout/stderr du script Selenium va dans un fichier dédié.
+    - Les logs import restent intacts.
+    - Le fichier Selenium log est flushé et persistant.
     """
 
-    # --- Chemins des logs ---
-    import_log = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")       # log général de l'import
-    selenium_log = os.path.join(UPLOAD_FOLDER, f"{user_id}_selenium_log.txt")   # log spécifique au script Selenium
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # s'assure que le dossier existe
+    selenium_log = os.path.join(UPLOAD_FOLDER, f"{user_id}_selenium_log.txt")
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
     try:
-        # --- Notifier dans le log import que le lancement est en cours ---
         add_user_log_file(user_id, f"🚀 Lancement Selenium pour {file_path}")
 
-        # --- Ouverture du fichier log Selenium en mode flush automatique ---
-        # 'buffering=1' permet de flusher le contenu ligne par ligne, pour que le log soit visible en temps réel
-        # '-u' dans la commande Python force le mode non-bufferisé du script Selenium
-        with open(selenium_log, 'a', encoding='utf-8', buffering=1) as f_selenium:
-            subprocess.Popen(
-                ['python3', '-u', SELENIUM_SCRIPT, file_path],  # script Selenium lancé
-                env=env_vars,       # variables d'environnement (login, options, etc.)
-                stdout=f_selenium,  # stdout du script redirigé vers le log Selenium
-                stderr=f_selenium,  # stderr du script redirigé vers le log Selenium
-                start_new_session=True  # détache le processus du serveur Flask pour qu'il continue en arrière-plan
-            )
+        # --- Ouvre le log Selenium en append avec flush automatique ---
+        f_selenium = open(selenium_log, 'a', encoding='utf-8', buffering=1)
 
-        # --- Confirmer dans le log import que le lancement a réussi ---
-        add_user_log_file(user_id, f"✅ Import lancé pour {file_path}")
+        # Lancer le script en mode non-bufferisé (-u)
+        proc = subprocess.Popen(
+            ['python3', '-u', SELENIUM_SCRIPT, file_path],
+            env=env_vars,
+            stdout=f_selenium,
+            stderr=subprocess.STDOUT,
+            start_new_session=True
+        )
+
+        add_user_log_file(user_id, f"✅ Import Selenium lancé pour {file_path} (PID={proc.pid})")
+
+        # On lance un thread pour fermer proprement le fichier log quand le processus se termine
+        def monitor_proc(proc, file_handle):
+            proc.wait()
+            try:
+                file_handle.close()
+                add_user_log_file(user_id, f"ℹ️ Selenium terminé (PID={proc.pid}), log fermé proprement")
+            except Exception as e:
+                add_user_log_file(user_id, f"❌ Impossible de fermer log Selenium : {e}")
+
+        t = Thread(target=monitor_proc, args=(proc, f_selenium), daemon=True)
+        t.start()
 
     except Exception as e:
-        # --- En cas d'erreur lors du lancement du script Selenium ---
-        # L'erreur est consignée dans le log import pour que l'utilisateur ou dev puisse la voir
         add_user_log_file(user_id, f"❌ Impossible de lancer l'import Selenium: {e}")
+
+
 
 
 
