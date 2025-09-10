@@ -60,6 +60,30 @@
 {% endwith %}
 
 
+<!-- Boutons Retry et Annuler -->
+<div class="mt-3 text-center">
+    <button id="retry-btn" class="btn btn-sm btn-success">🔄 Retry</button>
+    <button id="cancel-btn" class="btn btn-sm btn-danger">🛑 Annuler</button>
+</div>
+
+<script>
+// Bouton Retry : relance le rafraîchissement du log immédiatement
+document.getElementById("retry-btn").addEventListener("click", () => {
+    refreshSeleniumLog();  // fonction existante pour rafraîchir les logs
+});
+
+// Bouton Annuler : envoie une requête POST pour stopper l'import
+document.getElementById("cancel-btn").addEventListener("click", () => {
+    fetch("/cancel_csv", { method: "POST" })
+        .then(resp => resp.json())
+        .then(data => {
+            alert(data.message);  // affiche le message de confirmation
+        })
+        .catch(err => console.error("Erreur annulation import:", err));
+});
+</script>
+
+
 
         <!-- Script pour rafraîchir les logs d'import en quasi temps réel -->
 <script>
