@@ -607,41 +607,36 @@ def post_evend():
         add_user_log_file(user_id, f"⚠️ Import annulé : quota restant {remaining_quota}, fichier {nb_items}")
         return redirect(url_for('index'))
 
+    # --- Préparer les variables d'environnement pour Selenium ---
+    env_vars = os.environ.copy()
+    env_vars["EVEND_EMAIL"] = request.form.get("evend_email", "")
+    env_vars["EVEND_PASSWORD"] = request.form.get("evend_password", "")
 
+    form_keys = [
+        "type_annonce", "categorie", "titre", "description",
+        "condition", "retour", "garantie", "prix", "stock",
+        "frais_port_article", "frais_port_sup", "photo_defaut",
+        "livraison_ramassage_check", "livraison_expedition_check", "livraison_ramassage"
+    ]
 
-# --- Préparer les variables d'environnement pour Selenium ---
-env_vars = os.environ.copy()
+    for key in form_keys:
+        env_vars[key] = request.form.get(key, "")
 
-# ⚠️ Attention : Selenium attend EVEND_EMAIL et EVEND_PASSWORD
-env_vars["EVEND_EMAIL"] = request.form.get("evend_email", "")
-env_vars["EVEND_PASSWORD"] = request.form.get("evend_password", "")
+    env_vars["livraison_ramassage_check"] = "on" if request.form.get("livraison_ramassage_check") else ""
+    env_vars["livraison_expedition_check"] = "on" if request.form.get("livraison_expedition_check") else ""
 
-# Autres variables pour le formulaire
-form_keys = [
-    "type_annonce", "categorie", "titre", "description",
-    "condition", "retour", "garantie", "prix", "stock",
-    "frais_port_article", "frais_port_sup", "photo_defaut",
-    "livraison_ramassage_check", "livraison_expedition_check", "livraison_ramassage"
-]
+    # --- Lancer Selenium en arrière-plan et mettre à jour DB/log ---
+    try:
+        add_user_log_file(user_id, f"🚀 Lancement Selenium pour {nb_items} articles depuis {file_path}")
+        launch_selenium_import(user_id, file_path, env_vars)
+        add_import(user_id, nb_items)
+        flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
+        add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
+    except Exception as e:
+        flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
+        add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
 
-for key in form_keys:
-    env_vars[key] = request.form.get(key, "")
-
-env_vars["livraison_ramassage_check"] = "on" if request.form.get("livraison_ramassage_check") else ""
-env_vars["livraison_expedition_check"] = "on" if request.form.get("livraison_expedition_check") else ""
-
-# --- Lancer Selenium en arrière-plan et mettre à jour DB/log ---
-try:
-    add_user_log_file(user_id, f"🚀 Lancement Selenium pour {nb_items} articles depuis {file_path}")
-    launch_selenium_import(user_id, file_path, env_vars)
-    add_import(user_id, nb_items)
-    flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
-    add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
-except Exception as e:
-    flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
-    add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
-
-return redirect(url_for('index'))
+    return redirect(url_for('index'))
 
 
 # --- Réinitialiser dernier CSV ---
