@@ -277,13 +277,21 @@ def process_csv(csv_path):
         write_log("❌ CSV vide.")
         return
 
+    # ----------------- Gestion de la file -----------------
     queue = enter_queue(USER_ID, len(df))
     position = next((i for i, u in enumerate(queue) if u['id'] == USER_ID), 0)
-    if position > 0:
-        est_time = sum(u['articles'] for u in queue[:position]) * 3
-        write_log(f"⚠️ Vous êtes en position #{position+1} dans la file. Estimation: ~{est_time}s")
-        return
 
+    # Boucle d'attente si pas en tête de file
+    while position > 0:
+        est_time = sum(u['articles'] for u in queue[:position]) * 3
+        write_log(f"⚠️ En position #{position+1}, attente avant de commencer l'import (~{est_time}s estimé)...")
+        time.sleep(5)  # pause de 5 secondes
+        queue = load_queue()
+        position = next((i for i, u in enumerate(queue) if u['id'] == USER_ID), 0)
+
+    write_log("✅ C'est votre tour ! Début de l'import automatique...")
+
+    # ----------------- Traitement du CSV -----------------
     last_batch, last_idx = load_progress()
     batches = [df[i:i+BATCH_SIZE] for i in range(0, len(df), BATCH_SIZE)]
 
