@@ -267,107 +267,117 @@ def check_cancel(user_id=USER_ID):
 # CSV Processing
 # =====================================================
 def process_csv(csv_path):
-    check_cancel(USER_ID)
+    try:
+        check_cancel(USER_ID)
 
-    if not os.path.exists(csv_path):
-        write_log(f"❌ CSV introuvable: {csv_path}")
-        return
-    df = pd.read_csv(csv_path)
-    if df.empty:
-        write_log("❌ CSV vide.")
-        return
+        if not os.path.exists(csv_path):
+            write_log(f"❌ CSV introuvable: {csv_path}")
+            return
+        df = pd.read_csv(csv_path)
+        if df.empty:
+            write_log("❌ CSV vide.")
+            return
 
-    # ----------------- Gestion de la file -----------------
-    queue = enter_queue(USER_ID, len(df))
-    position = next((i for i, u in enumerate(queue) if u['id'] == USER_ID), 0)
-
-    # Boucle d'attente si pas en tête de file
-    while position > 0:
-        est_time = sum(u['articles'] for u in queue[:position]) * 3
-        write_log(f"⚠️ En position #{position+1}, attente avant de commencer l'import (~{est_time}s estimé)...")
-        time.sleep(5)  # pause de 5 secondes
-        queue = load_queue()
+        # ----------------- Gestion de la file -----------------
+        queue = enter_queue(USER_ID, len(df))
         position = next((i for i, u in enumerate(queue) if u['id'] == USER_ID), 0)
 
-    write_log("✅ C'est votre tour ! Début de l'import automatique...")
+        # Boucle d'attente si pas en tête de file
+        while position > 0:
+            est_time = sum(u['articles'] for u in queue[:position]) * 3
+            write_log(f"⚠️ En position #{position+1}, attente avant de commencer l'import (~{est_time}s estimé)...")
+            time.sleep(5)
+            queue = load_queue()
+            position = next((i for i, u in enumerate(queue) if u['id'] == USER_ID), 0)
 
-    # ----------------- Traitement du CSV -----------------
-    last_batch, last_idx = load_progress()
-    batches = [df[i:i+BATCH_SIZE] for i in range(0, len(df), BATCH_SIZE)]
+        write_log("✅ C'est votre tour ! Début de l'import automatique...")
 
-    for batch_index, batch in enumerate(batches):
-        if batch_index < last_batch:
-            continue
+        # ----------------- Traitement du CSV -----------------
+        last_batch, last_idx = load_progress()
+        batches = [df[i:i+BATCH_SIZE] for i in range(0, len(df), BATCH_SIZE)]
 
-        driver = None
-        try:
-            driver = get_driver()
-            wait = WebDriverWait(driver, 20)
-            login(driver, wait)
+        for batch_index, batch in enumerate(batches):
+            if batch_index < last_batch:
+                continue
 
-            write_log(f"--- DÉBUT lot {batch_index+1}/{len(batches)} ---")
+            driver = None
+            try:
+                driver = get_driver()
+                wait = WebDriverWait(driver, 20)
+                login(driver, wait)
 
-            for idx, row in batch.iterrows():
-                check_cancel(USER_ID)
+                write_log(f"--- DÉBUT lot {batch_index+1}/{len(batches)} ---")
 
-                if batch_index == last_batch and idx <= last_idx:
-                    continue
-
-                titre = str(row.get('titre', 'Titre manquant') or 'Titre manquant')
-                write_log(f"📌 Publication article {idx+1} lot {batch_index+1}: {titre}")
-
-                driver.get(EVEND_NEW_LISTING_URL)
-                wait.until(EC.presence_of_element_located((By.ID, "type_annonce")))
-
-                fields = {
-                    "type_annonce": str(row.get('type_annonce', 'Vente classique')),
-                    "categorie": str(row.get('categorie', 'Autre')),
-                    "titre": titre,
-                    "description": str(row.get('description', 'Description non disponible')),
-                    "condition": str(row.get('condition', 'Non spécifié')),
-                    "retour": str(row.get('retour', 'Non')),
-                    "garantie": str(row.get('garantie', 'Non')),
-                    "prix": str(float(row.get('prix', 0.0))),
-                    "stock": str(int(row.get('stock', 1))),
-                    "frais_port_article": str(FRAIS_PORT_ARTICLE),
-                    "frais_port_sup": str(FRAIS_PORT_SUP)
-                }
-
-                for field_id, value in fields.items():
+                for idx, row in batch.iterrows():
                     try:
-                        el = driver.find_element(By.ID, field_id)
-                        el.clear()
-                        el.send_keys(value)
-                    except:
-                        pass
+                        check_cancel(USER_ID)
 
-                if LIVRAISON_RAMASSAGE_CHECK:
-                    check_radio(driver, "livraison", "ramassage")
+                        if batch_index == last_batch and idx <= last_idx:
+                            continue
 
-                image_urls = [row.get('photo_defaut')] if row.get('photo_defaut') else []
-                upload_images(driver, image_urls)
+                        titre = str(row.get('titre', 'Titre manquant') or 'Titre manquant')
+                        write_log(f"📌 Publication article {idx+1} lot {batch_index+1}: {titre}")
 
-                try:
-                    driver.find_element(By.ID, "submitBtn").click()
-                    if wait_for_success_message(wait):
-                        write_log("✅ Article publié avec succès.")
-                    else:
-                        write_log("⚠️ Article publié mais confirmation non détectée.")
-                except:
-                    write_log("❌ Impossible de soumettre l'article.")
+                        driver.get(EVEND_NEW_LISTING_URL)
+                        wait.until(EC.presence_of_element_located((By.ID, "type_annonce")))
 
-                save_progress(batch_index, idx)
+                        fields = {
+                            "type_annonce": str(row.get('type_annonce', 'Vente classique')),
+                            "categorie": str(row.get('categorie', 'Autre')),
+                            "titre": titre,
+                            "description": str(row.get('description', 'Description non disponible')),
+                            "condition": str(row.get('condition', 'Non spécifié')),
+                            "retour": str(row.get('retour', 'Non')),
+                            "garantie": str(row.get('garantie', 'Non')),
+                            "prix": str(float(row.get('prix', 0.0))),
+                            "stock": str(int(row.get('stock', 1))),
+                            "frais_port_article": str(FRAIS_PORT_ARTICLE),
+                            "frais_port_sup": str(FRAIS_PORT_SUP)
+                        }
 
-            write_log(f"--- FIN lot {batch_index+1}/{len(batches)} ---")
+                        for field_id, value in fields.items():
+                            try:
+                                el = driver.find_element(By.ID, field_id)
+                                el.clear()
+                                el.send_keys(value)
+                            except:
+                                write_log(f"⚠️ Impossible de remplir le champ {field_id}")
 
-        except Exception as e:
-            write_log(f"❌ Erreur lot {batch_index+1}: {e}")
+                        if LIVRAISON_RAMASSAGE_CHECK:
+                            check_radio(driver, "livraison", "ramassage")
 
-        finally:
-            cleanup_driver(driver)
+                        image_urls = [row.get('photo_defaut')] if row.get('photo_defaut') else []
+                        upload_images(driver, image_urls)
 
-    write_log("🎉 Tous les articles du CSV ont été traités.")
-    leave_queue(USER_ID)
+                        try:
+                            driver.find_element(By.ID, "submitBtn").click()
+                            if wait_for_success_message(wait):
+                                write_log("✅ Article publié avec succès.")
+                            else:
+                                write_log("⚠️ Article publié mais confirmation non détectée.")
+                        except:
+                            write_log("❌ Impossible de soumettre l'article.")
+
+                        save_progress(batch_index, idx)
+
+                    except Exception as e_row:
+                        write_log(f"❌ Erreur article {idx+1} lot {batch_index+1}: {e_row}")
+
+                write_log(f"--- FIN lot {batch_index+1}/{len(batches)} ---")
+
+            except Exception as e_batch:
+                write_log(f"❌ Erreur lot {batch_index+1}: {e_batch}")
+
+            finally:
+                cleanup_driver(driver)
+
+        write_log("🎉 Tous les articles du CSV ont été traités.")
+        leave_queue(USER_ID)
+
+    except Exception as e_global:
+        write_log(f"❌ Erreur globale lors du traitement du CSV: {e_global}")
+        leave_queue(USER_ID)
+
 
 # =====================================================
 # Folder watcher
