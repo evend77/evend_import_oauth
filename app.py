@@ -44,16 +44,16 @@ for f in os.listdir(UPLOAD_FOLDER):
         print(f"❌ Impossible de supprimer {f}: {e}")
 
 
-
-
-# --- Ajouter log utilisateur ---
+# --- Ajouter log utilisateur (flush immédiat) ---
 def add_user_log_file(user_id, message):
     log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
     try:
-        with open(log_file, 'a', encoding='utf-8') as f:
+        # 'buffering=1' = flush ligne par ligne
+        with open(log_file, 'a', encoding='utf-8', buffering=1) as f:
             f.write(f"[{datetime.utcnow().isoformat()}] {message}\n")
     except Exception as e:
         print(f"❌ Impossible d'écrire dans le log {log_file}: {e}")
+
 
 
 @app.route('/import', methods=['POST'])
@@ -181,35 +181,34 @@ except Exception as e:
 def launch_selenium_import(user_id, file_path, env_vars):
     """
     Lance le script Selenium pour publier les articles e-Vend.
-    - Tout stdout/stderr du script Selenium va dans un fichier dédié.
-    - Les logs import restent intacts.
-    - Le fichier Selenium log est flushé et persistant.
+    Les logs sont flushés en temps réel pour Render.
     """
-
     selenium_log = os.path.join(UPLOAD_FOLDER, f"{user_id}_selenium_log.txt")
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
     try:
         add_user_log_file(user_id, f"🚀 Lancement Selenium pour {file_path}")
 
-        # --- Ouvre le log Selenium en append avec flush automatique ---
+        # Ouvre le log Selenium en mode flush ligne par ligne
         f_selenium = open(selenium_log, 'a', encoding='utf-8', buffering=1)
 
-        # Lancer le script en mode non-bufferisé (-u)
+        # Lancer le script Selenium en mode non-bufferisé (-u)
         proc = subprocess.Popen(
             ['python3', '-u', SELENIUM_SCRIPT, file_path],
             env=env_vars,
             stdout=f_selenium,
             stderr=subprocess.STDOUT,
-            start_new_session=True
+            bufsize=1,  # flush ligne par ligne
+            universal_newlines=True  # stdout/stderr texte
         )
 
         add_user_log_file(user_id, f"✅ Import Selenium lancé pour {file_path} (PID={proc.pid})")
 
-        # On lance un thread pour fermer proprement le fichier log quand le processus se termine
+        # Thread pour fermer proprement le fichier quand le processus termine
         def monitor_proc(proc, file_handle):
             proc.wait()
             try:
+                file_handle.flush()
                 file_handle.close()
                 add_user_log_file(user_id, f"ℹ️ Selenium terminé (PID={proc.pid}), log fermé proprement")
             except Exception as e:
@@ -220,6 +219,8 @@ def launch_selenium_import(user_id, file_path, env_vars):
 
     except Exception as e:
         add_user_log_file(user_id, f"❌ Impossible de lancer l'import Selenium: {e}")
+
+
 
 
 
