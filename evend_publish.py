@@ -1,25 +1,25 @@
-# evend_publish.py (corrigé)
+# evend_publish.py (version finale)
 import os
 import sys
+import time
+import json
+import logging
+import tempfile
+import threading
+from datetime import datetime
+
 import pandas as pd
 import requests
-import tempfile
-import time
-import logging
-import json
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
-from pathlib import Path
-import threading
+from selenium.common.exceptions import TimeoutException, WebDriverException
 
 # ---------------------------- Configuration ----------------------------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Lire USER_ID de manière cohérente (utilise la variable d'env USER_ID si fournie)
 USER_ID = os.environ.get("USER_ID", f"user_{os.getpid()}")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
@@ -44,13 +44,9 @@ EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
 EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
 
 # =====================================================
-# LogWrapper thread-safe et flush immédiat
+# Log wrapper thread-safe
 # =====================================================
 class LogWrapper:
-    """
-    Wrapper pour écrire dans le log Selenium de manière thread-safe.
-    Chaque ligne est flushée immédiatement pour que le log soit visible en temps réel.
-    """
     def __init__(self, path):
         self.path = path
         self.lock = threading.Lock()
@@ -66,16 +62,11 @@ class LogWrapper:
                     f.flush()
 
     def flush(self):
-        pass  # Nécessaire pour compatibilité
+        pass
 
-# Instancier le wrapper global
 log = LogWrapper(LOG_FILE)
 
-# =====================================================
-# Fonction utilitaire pour écrire log + print console
-# =====================================================
 def write_log(msg):
-    """Écrit dans le log Selenium et imprime aussi dans la console pour debug"""
     ts_msg = f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] {msg}"
     print(ts_msg, flush=True)
     try:
@@ -84,10 +75,21 @@ def write_log(msg):
         print(f"⚠️ Impossible d'écrire dans le log: {e}", flush=True)
 
 # =====================================================
-# Fonction pour récupérer le driver Chrome Selenium
-# (une seule définition)
+# Driver Selenium
 # =====================================================
-def get_driver():
+log_lock = threading.Lock()
+
+def get_driver(user_id=USER_ID, timeout=15):
+    selenium_log = os.path.join(UPLOAD_FOLDER, f"{user_id}_selenium_log.txt")
+
+    def write_selenium_log(message):
+        with log_lock:
+            try:
+                with open(selenium_log, 'a', encoding='utf-8', buffering=1) as f:
+                    f.write(f"[{datetime.utcnow().isoformat()}] {message}\n")
+            except Exception as e:
+                print(f"❌ Impossible d'écrire dans le log Selenium: {e}")
+
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
@@ -96,24 +98,20 @@ def get_driver():
     chrome_options.add_argument("--disable-web-security")
     chrome_options.add_argument("--ignore-certificate-errors")
     chrome_options.add_argument("--allow-running-insecure-content")
-    chrome_options.add_experimental_option(
-        "prefs", {"profile.managed_default_content_settings.images": 2}
-    )
-    
+    chrome_options.add_experimental_option("prefs", {"profile.managed_default_content_settings.images": 2})
+
     try:
         driver = webdriver.Chrome(options=chrome_options)
-        # Timeout global pour charger la page (en secondes)
-        driver.set_page_load_timeout(15)
-        write_log("✅ Driver Selenium initialisé avec timeout global 15s")
+        driver.set_page_load_timeout(timeout)
+        write_selenium_log(f"✅ Driver Selenium initialisé avec timeout global {timeout}s")
         return driver
+    except WebDriverException as e:
+        write_selenium_log(f"❌ Erreur WebDriver Selenium: {e}")
+        raise
     except Exception as e:
-        write_log(f"❌ Impossible d'initialiser le driver Selenium: {e}")
+        write_selenium_log(f"❌ Impossible d'initialiser le driver Selenium: {e}")
         raise
 
-
-# =====================================================
-# Nettoyage driver
-# =====================================================
 def cleanup_driver(driver):
     if driver:
         try:
@@ -123,20 +121,8 @@ def cleanup_driver(driver):
             write_log(f"⚠️ Erreur lors du cleanup du driver: {e}")
 
 # =====================================================
-# Reste des fonctions (queue, session, login, upload, etc.)
-# (identiques à ton code, inchangées sauf petits ajustements)
+# File/queue/session utilities
 # =====================================================
-
-def launch_csv_import(csv_path):
-    def _run():
-        try:
-            process_csv(csv_path)
-        except Exception as e:
-            write_log(f"❌ Erreur inattendue dans le traitement du CSV {csv_path}: {e}")
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
-    write_log(f"🚀 Import CSV lancé en arrière-plan: {csv_path}")
-
 def load_queue():
     if os.path.exists(QUEUE_FILE):
         try:
@@ -189,7 +175,6 @@ def load_session(driver):
                 try:
                     driver.add_cookie(cookie)
                 except Exception:
-                    # Certains cookies peuvent être incompatibles
                     pass
             return True
         except Exception as e:
@@ -198,26 +183,20 @@ def load_session(driver):
 
 def login(driver, wait):
     write_log("🔹 Naviguer vers e-Vend")
-    driver.get("https://www.e-vend.ca/")
-
+    driver.get(EVEND_LOGIN_URL)
     write_log("🔹 Cliquer sur Connexion")
     WebDriverWait(driver, 10).until(
         EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Connexion')]"))
     ).click()
-
     write_log("🔹 Attendre le formulaire de connexion")
     wait.until(EC.presence_of_element_located((By.NAME, "email")))
-
     write_log("🔹 Remplir email et mot de passe")
     driver.find_element(By.NAME, "email").send_keys(EVEND_EMAIL)
     driver.find_element(By.NAME, "password").send_keys(EVEND_PASSWORD)
-
     write_log("🔹 Cliquer sur Se connecter")
     driver.find_element(By.XPATH, "//button[contains(text(),'Se connecter')]").click()
-
     write_log("🔹 Attente du tableau de bord")
     wait.until(EC.presence_of_element_located((By.ID, "dashboard")))
-
     write_log("✅ Login réussi")
     save_session(driver)
 
@@ -282,7 +261,22 @@ def load_progress():
             pass
     return 0, -1
 
+# =====================================================
+# Check annulation
+# =====================================================
+def check_cancel(user_id=USER_ID):
+    cancel_flag = os.path.join(UPLOAD_FOLDER, f"{user_id}_cancel_flag")
+    if os.path.exists(cancel_flag):
+        write_log("🛑 Flag d’annulation détecté, arrêt du bot Selenium...")
+        os.remove(cancel_flag)
+        raise Exception("Import annulé par l’utilisateur")
+
+# =====================================================
+# CSV Processing
+# =====================================================
 def process_csv(csv_path):
+    check_cancel(USER_ID)
+
     if not os.path.exists(csv_path):
         write_log(f"❌ CSV introuvable: {csv_path}")
         return
@@ -314,6 +308,8 @@ def process_csv(csv_path):
             write_log(f"--- DÉBUT lot {batch_index+1}/{len(batches)} ---")
 
             for idx, row in batch.iterrows():
+                check_cancel(USER_ID)
+
                 if batch_index == last_batch and idx <= last_idx:
                     continue
 
@@ -373,6 +369,9 @@ def process_csv(csv_path):
     write_log("🎉 Tous les articles du CSV ont été traités.")
     leave_queue(USER_ID)
 
+# =====================================================
+# Watch folder
+# =====================================================
 def watch_folder():
     processed = set()
     write_log(f"👀 Surveillance du dossier: {UPLOAD_FOLDER}")
@@ -385,26 +384,24 @@ def watch_folder():
                 processed.add(path)
         time.sleep(5)
 
-# ---------------------------- Main ----------------------------
+# =====================================================
+# Main
+# =====================================================
 if __name__ == "__main__":
-    # Vérification des variables d'environnement indispensables
     missing = []
     if not EVEND_EMAIL:
         missing.append("EVEND_EMAIL")
     if not EVEND_PASSWORD:
         missing.append("EVEND_PASSWORD")
     if missing:
-        write_log(f"❌ Email ou mot de passe e-Vend manquant dans les variables d'environnement. Variables attendues: {', '.join(missing)}")
+        write_log(f"❌ Email ou mot de passe e-Vend manquant: {', '.join(missing)}")
         sys.exit(1)
 
-    # Si un argument (chemin CSV) est fourni -> traiter ce fichier puis exit (utile si lancé par flask subprocess)
     if len(sys.argv) > 1:
         csv_arg = sys.argv[1]
-        write_log(f"▶ Démarrage traitement fichier fourni en argument: {csv_arg}")
+        write_log(f"▶ Démarrage traitement fichier fourni: {csv_arg}")
         process_csv(csv_arg)
         write_log("▶ Fin traitement argument, exiting.")
         sys.exit(0)
 
-    # Sinon, comportement par défaut : surveiller le dossier uploads
     watch_folder()
-
