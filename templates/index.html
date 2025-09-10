@@ -78,9 +78,10 @@
 </div>
 
 <script>
-// Bouton Retry : relance le rafraîchissement du log immédiatement
+// Bouton Retry : relance le rafraîchissement des deux logs immédiatement
 document.getElementById("retry-btn").addEventListener("click", () => {
-    refreshSeleniumLog();  // fonction existante pour rafraîchir les logs
+    refreshImportLog();    // rafraîchit le log d'import
+    refreshSeleniumLog();  // rafraîchit le log Selenium
 });
 
 // Bouton Annuler : envoie une requête POST pour stopper l'import
@@ -147,7 +148,7 @@ refreshSeleniumLog();
         {% else %}
 
             <!-- Étape 1 : Télécharger vos annonces eBay -->
-            <div class="mb-4">
+                <div class="mb-4 mt-4">          
                 <h2 class="h5 text-secondary" style="font-weight: 900;"><strong>Étape 1: Télécharger vos annonces eBay</strong></h2>
                 <p>Dans cette première étape, vous allez exporter vos annonces eBay au format CSV afin de pouvoir les préparer pour l’importation sur e-Vend. Une fois téléchargé, vous pourrez vérifier et ajuster vos informations avant de passer à l’étape suivante, l’importation sur e-Vend.</p>
                 <p>⚠️ Remarque importante : Vous devez être connecté à votre compte eBay pour télécharger vos annonces. Votre quota journalier d’exportation est limité, donc assurez-vous de ne pas dépasser la limite.</p>
