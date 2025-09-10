@@ -1,11 +1,10 @@
-# evend_publish.py (version finale)
+# evend_publish.py (version finale stable avec log utilisateur)
 import os
 import sys
 import time
 import json
-import logging
-import tempfile
 import threading
+import tempfile
 from datetime import datetime
 
 import pandas as pd
@@ -18,8 +17,6 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
 
 # ---------------------------- Configuration ----------------------------
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
 USER_ID = os.environ.get("USER_ID", f"user_{os.getpid()}")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
@@ -37,14 +34,14 @@ LIVRAISON_RAMASSAGE_CHECK = os.environ.get("livraison_ramassage_check") == 'on'
 FRAIS_PORT_ARTICLE = float(os.environ.get("frais_port_article", "0"))
 FRAIS_PORT_SUP = float(os.environ.get("frais_port_sup", "0"))
 
-SESSION_MAX_AGE = 24 * 3600  # 24h
+SESSION_MAX_AGE = 24 * 3600
 BATCH_SIZE = 20
 
 EVEND_LOGIN_URL = "https://www.e-vend.ca/login"
 EVEND_NEW_LISTING_URL = "https://www.e-vend.ca/l/draft/00000000-0000-0000-0000-000000000000/new/details"
 
 # =====================================================
-# Log wrapper thread-safe
+# Log thread-safe centralisé
 # =====================================================
 class LogWrapper:
     def __init__(self, path):
@@ -52,14 +49,13 @@ class LogWrapper:
         self.lock = threading.Lock()
 
     def write(self, text):
-        if text is None:
+        if not text:
             return
         txt = str(text).strip()
-        if txt:
-            with self.lock:
-                with open(self.path, "a", encoding="utf-8") as f:
-                    f.write(f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] {txt}\n")
-                    f.flush()
+        with self.lock:
+            with open(self.path, "a", encoding="utf-8") as f:
+                f.write(f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] {txt}\n")
+                f.flush()
 
     def flush(self):
         pass
@@ -74,22 +70,15 @@ def write_log(msg):
     except Exception as e:
         print(f"⚠️ Impossible d'écrire dans le log: {e}", flush=True)
 
+# Test log immédiat
+write_log("🔧 Script démarré, log utilisateur OK")
+
 # =====================================================
-# Driver Selenium
+# Selenium driver
 # =====================================================
 log_lock = threading.Lock()
 
-def get_driver(user_id=USER_ID, timeout=15):
-    selenium_log = os.path.join(UPLOAD_FOLDER, f"{user_id}_selenium_log.txt")
-
-    def write_selenium_log(message):
-        with log_lock:
-            try:
-                with open(selenium_log, 'a', encoding='utf-8', buffering=1) as f:
-                    f.write(f"[{datetime.utcnow().isoformat()}] {message}\n")
-            except Exception as e:
-                print(f"❌ Impossible d'écrire dans le log Selenium: {e}")
-
+def get_driver(timeout=15):
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
@@ -103,13 +92,13 @@ def get_driver(user_id=USER_ID, timeout=15):
     try:
         driver = webdriver.Chrome(options=chrome_options)
         driver.set_page_load_timeout(timeout)
-        write_selenium_log(f"✅ Driver Selenium initialisé avec timeout global {timeout}s")
+        write_log("✅ Driver Selenium initialisé")
         return driver
     except WebDriverException as e:
-        write_selenium_log(f"❌ Erreur WebDriver Selenium: {e}")
+        write_log(f"❌ Erreur WebDriver Selenium: {e}")
         raise
     except Exception as e:
-        write_selenium_log(f"❌ Impossible d'initialiser le driver Selenium: {e}")
+        write_log(f"❌ Impossible d'initialiser le driver Selenium: {e}")
         raise
 
 def cleanup_driver(driver):
@@ -121,7 +110,7 @@ def cleanup_driver(driver):
             write_log(f"⚠️ Erreur lors du cleanup du driver: {e}")
 
 # =====================================================
-# File/queue/session utilities
+# File / queue / session utilities
 # =====================================================
 def load_queue():
     if os.path.exists(QUEUE_FILE):
@@ -174,13 +163,16 @@ def load_session(driver):
                 cookie.pop('sameSite', None)
                 try:
                     driver.add_cookie(cookie)
-                except Exception:
+                except:
                     pass
             return True
         except Exception as e:
             write_log(f"⚠️ Impossible de charger la session: {e}")
     return False
 
+# =====================================================
+# Login / Upload utilities
+# =====================================================
 def login(driver, wait):
     write_log("🔹 Naviguer vers e-Vend")
     driver.get(EVEND_LOGIN_URL)
@@ -262,7 +254,7 @@ def load_progress():
     return 0, -1
 
 # =====================================================
-# Check annulation
+# Annulation
 # =====================================================
 def check_cancel(user_id=USER_ID):
     cancel_flag = os.path.join(UPLOAD_FOLDER, f"{user_id}_cancel_flag")
@@ -370,7 +362,7 @@ def process_csv(csv_path):
     leave_queue(USER_ID)
 
 # =====================================================
-# Watch folder
+# Folder watcher
 # =====================================================
 def watch_folder():
     processed = set()
@@ -405,3 +397,4 @@ if __name__ == "__main__":
         sys.exit(0)
 
     watch_folder()
+
