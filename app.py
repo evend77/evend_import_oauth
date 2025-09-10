@@ -623,28 +623,25 @@ form_keys = [
     "frais_port_article", "frais_port_sup", "photo_defaut",
     "livraison_ramassage_check", "livraison_expedition_check", "livraison_ramassage"
 ]
+
 for key in form_keys:
     env_vars[key] = request.form.get(key, "")
 
 env_vars["livraison_ramassage_check"] = "on" if request.form.get("livraison_ramassage_check") else ""
 env_vars["livraison_expedition_check"] = "on" if request.form.get("livraison_expedition_check") else ""
 
+# --- Lancer Selenium en arrière-plan et mettre à jour DB/log ---
+try:
+    add_user_log_file(user_id, f"🚀 Lancement Selenium pour {nb_items} articles depuis {file_path}")
+    launch_selenium_import(user_id, file_path, env_vars)
+    add_import(user_id, nb_items)
+    flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
+    add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
+except Exception as e:
+    flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
+    add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
 
-    # --- Lancer Selenium en arrière-plan et mettre à jour DB/log ---
-    try:
-        add_user_log_file(user_id, f"🚀 Lancement Selenium pour {nb_items} articles depuis {file_path}")
-        launch_selenium_import(user_id, file_path, env_vars)
-        add_import(user_id, nb_items)
-        flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
-        add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
-    except Exception as e:
-        flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
-        add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
-
-    return redirect(url_for('index'))
-
-
-
+return redirect(url_for('index'))
 
 
 # --- Réinitialiser dernier CSV ---
