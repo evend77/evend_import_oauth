@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Reconnecter votre compte eBay - e-Vend</title>
+    <title>Reconnecter votre compte eBay - eBay CSV Downloader</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
@@ -31,7 +31,7 @@
         {% endwith %}
 
         <div class="text-center">
-            <p class="mb-3">Veuillez reconnecter votre compte eBay pour continuer vos imports.</p>
+            <p class="mb-3">Veuillez reconnecter votre compte eBay pour continuer.</p>
             <a href="{{ url_for('login_ebay') }}" class="btn btn-primary btn-lg w-100">
                 🔑 Se reconnecter avec eBay
             </a>
@@ -39,7 +39,11 @@
 
         <div class="alert alert-info mt-4 text-center" style="border-radius: 12px;">
             <h5 class="fw-bold">💡 Astuce :</h5>
-            <p class="mb-0">Après la reconnexion, vous serez redirigé automatiquement vers la page d'import.</p>
+            <p class="mb-0">Après la reconnexion, vous pourrez télécharger à nouveau vos annonces CSV.</p>
+        </div>
+
+        <div class="text-center mt-3">
+            <a href="{{ url_for('index') }}" class="btn btn-link">← Retour à l'accueil</a>
         </div>
 
     </div>
