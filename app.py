@@ -21,7 +21,7 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 # --- Configuration eBay API ---
 EBAY_CLIENT_ID = 'AlexBoss-eVendImp-PRD-bd29c22a7-4a223ad6'
 EBAY_CLIENT_SECRET = 'PRD-d29c22a7bc6d-e864-4ffc-8934-e19a'
-EBAY_REDIRECT_URI = 'https://evend-import.onrender.com/ebay_callback'
+EBAY_REDIRECT_URI = 'https://evend-import-oauth.onrender.com/ebay_callback'
 EBAY_OAUTH_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
 EBAY_TRADING_API_URL = "https://api.ebay.com/ws/api.dll"
 EBAY_COMPAT_LEVEL = "1191"
@@ -276,24 +276,49 @@ def index():
 
 @app.route('/login_ebay')
 def login_ebay():
+    print("=== LOGIN EBAY ===")
     if 'user_id' not in session:
         session['user_id'] = str(uuid.uuid4())
+        print(f"New user_id: {session['user_id']}")
     params = {
         "client_id": EBAY_CLIENT_ID,
         "redirect_uri": EBAY_REDIRECT_URI,
         "response_type": "code",
         "scope": "https://api.ebay.com/oauth/api_scope"
     }
-    return redirect("https://auth.ebay.com/oauth2/authorize?" + urllib.parse.urlencode(params))
+    url = "https://auth.ebay.com/oauth2/authorize?" + urllib.parse.urlencode(params)
+    print(f"Redirecting to: {url}")
+    return redirect(url)
 
 @app.route('/ebay_callback')
 def ebay_callback():
+    print("=== CALLBACK RECEIVED ===")
+    print(f"Full URL: {request.url}")
+    print(f"Args: {request.args}")
+    
     code = request.args.get('code')
-    if not code:
-        flash("❌ OAuth eBay échoué.")
+    error = request.args.get('error')
+    
+    if error:
+        print(f"Error from eBay: {error}")
+        flash(f"❌ Erreur eBay: {error}")
         return redirect(url_for('index'))
     
-    user_id = session['user_id']
+    if not code:
+        print("No code received")
+        flash("❌ OAuth eBay échoué: pas de code reçu.")
+        return redirect(url_for('index'))
+    
+    print(f"Code reçu: {code[:50]}...")
+    
+    user_id = session.get('user_id')
+    if not user_id:
+        print("No user_id in session")
+        flash("❌ Session expirée, reconnectez-vous.")
+        return redirect(url_for('index'))
+    
+    print(f"User ID: {user_id}")
+    
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     data = {
         "grant_type": "authorization_code",
@@ -302,19 +327,49 @@ def ebay_callback():
     }
     
     try:
-        r = requests.post(EBAY_OAUTH_TOKEN_URL, headers=headers, data=data, 
-                         auth=(EBAY_CLIENT_ID, EBAY_CLIENT_SECRET))
+        print("Tentative d'échange du code contre token...")
+        print(f"Token URL: {EBAY_OAUTH_TOKEN_URL}")
+        
+        r = requests.post(
+            EBAY_OAUTH_TOKEN_URL, 
+            headers=headers, 
+            data=data, 
+            auth=(EBAY_CLIENT_ID, EBAY_CLIENT_SECRET),
+            timeout=30
+        )
+        
+        print(f"Status code: {r.status_code}")
+        print(f"Response text: {r.text[:200] if r.text else 'empty'}")
+        
+        if r.status_code != 200:
+            print(f"Error response: {r.text}")
+            flash(f"❌ Erreur eBay: {r.status_code}")
+            return redirect(url_for('index'))
+        
         token_data = r.json()
         
         if 'access_token' in token_data:
-            save_tokens(user_id, token_data['access_token'], 
-                       token_data.get('refresh_token'), 
-                       token_data.get('expires_in', 7200))
+            save_tokens(
+                user_id, 
+                token_data['access_token'], 
+                token_data.get('refresh_token'), 
+                token_data.get('expires_in', 7200)
+            )
+            print("Tokens saved successfully")
             flash("✅ Connecté à eBay avec succès !")
         else:
+            print(f"No access_token in response: {token_data}")
             flash(f"❌ Erreur OAuth eBay: {token_data}")
+            
+    except requests.exceptions.Timeout:
+        print("Request timeout")
+        flash("❌ Délai d'attente dépassé")
+    except requests.exceptions.RequestException as e:
+        print(f"Request exception: {e}")
+        flash(f"❌ Erreur de connexion: {e}")
     except Exception as e:
-        flash(f"❌ Erreur lors de la connexion: {e}")
+        print(f"Unexpected exception: {e}")
+        flash(f"❌ Erreur: {e}")
     
     return redirect(url_for('index'))
 
@@ -332,7 +387,9 @@ def logout_ebay():
 
 @app.route('/download_ebay_csv')
 def download_ebay_csv():
+    print("=== DOWNLOAD CSV ===")
     user_id = session.get('user_id')
+    
     if not user_id or not get_user_tokens(user_id):
         flash("⚠️ Connecte d'abord ton compte eBay.")
         return redirect(url_for('index'))
