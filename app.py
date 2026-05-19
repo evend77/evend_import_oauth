@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file
 import os
 import pandas as pd
 import requests
@@ -10,7 +10,7 @@ import urllib.parse
 import logging
 
 app = Flask(__name__)
-app.secret_key = 'UN_SECRET_POUR_SESSION'  # ⚠️ change-le en prod
+app.secret_key = 'UN_SECRET_POUR_SESSION'
 
 # --- Configuration ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -25,7 +25,7 @@ EBAY_REDIRECT_URI = 'https://evend-import.onrender.com/ebay_callback'
 EBAY_OAUTH_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
 EBAY_TRADING_API_URL = "https://api.ebay.com/ws/api.dll"
 EBAY_COMPAT_LEVEL = "1191"
-EBAY_SITE_ID_PRIMARY = "2"  # Canada
+EBAY_SITE_ID_PRIMARY = "2"
 
 # --- Limites ---
 MAX_PER_FILE = 500
@@ -252,9 +252,13 @@ def fetch_active_items(oauth_token, max_items=MAX_PER_FILE):
     print(f"✅ Nombre total d'items actifs trouvés : {len(items)}")
     return items
 
-# --- Routes ---
+# =====================================================
+# ROUTES
+# =====================================================
+
 @app.route('/')
 def index():
+    """Ancienne route - garde ton ancien index.html intact"""
     user_id = session.get('user_id')
     connected = False
     today_imported = 0
@@ -270,7 +274,17 @@ def index():
                            today_imported=today_imported,
                            remaining_quota=remaining_quota)
 
-# --- OAuth eBay ---
+@app.route('/simple')
+def simple_index():
+    """Nouvelle route simple - utilise index1.html"""
+    user_id = session.get('user_id')
+    connected = False
+    if user_id:
+        access_token = get_valid_token(user_id)
+        if access_token:
+            connected = True
+    return render_template('index1.html', connected=connected)
+
 @app.route('/login_ebay')
 def login_ebay():
     if 'user_id' not in session:
@@ -288,18 +302,32 @@ def ebay_callback():
     code = request.args.get('code')
     if not code:
         flash("❌ OAuth eBay échoué.")
-        return redirect(url_for('index'))
+        return redirect(url_for('simple_index'))
+    
     user_id = session['user_id']
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    data = {"grant_type": "authorization_code", "code": code, "redirect_uri": EBAY_REDIRECT_URI}
-    r = requests.post(EBAY_OAUTH_TOKEN_URL, headers=headers, data=data, auth=(EBAY_CLIENT_ID, EBAY_CLIENT_SECRET))
-    token_data = r.json()
-    if 'access_token' in token_data:
-        save_tokens(user_id, token_data['access_token'], token_data.get('refresh_token'), token_data.get('expires_in', 7200))
-        flash("✅ Connecté à eBay avec succès !")
-    else:
-        flash(f"❌ Erreur OAuth eBay: {token_data}")
-    return redirect(url_for('index'))
+    data = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": EBAY_REDIRECT_URI
+    }
+    
+    try:
+        r = requests.post(EBAY_OAUTH_TOKEN_URL, headers=headers, data=data, 
+                         auth=(EBAY_CLIENT_ID, EBAY_CLIENT_SECRET))
+        token_data = r.json()
+        
+        if 'access_token' in token_data:
+            save_tokens(user_id, token_data['access_token'], 
+                       token_data.get('refresh_token'), 
+                       token_data.get('expires_in', 7200))
+            flash("✅ Connecté à eBay avec succès !")
+        else:
+            flash(f"❌ Erreur OAuth eBay: {token_data}")
+    except Exception as e:
+        flash(f"❌ Erreur lors de la connexion: {e}")
+    
+    return redirect(url_for('simple_index'))
 
 @app.route('/logout_ebay')
 def logout_ebay():
@@ -311,86 +339,56 @@ def logout_ebay():
         conn.close()
     session.pop('user_id', None)
     flash("✅ Vous vous êtes déconnecté de eBay.")
-    return redirect(url_for('index'))
+    return redirect(url_for('simple_index'))
 
-# --- Télécharger CSV eBay ---
 @app.route('/download_ebay_csv')
 def download_ebay_csv():
     user_id = session.get('user_id')
     if not user_id or not get_user_tokens(user_id):
-        flash("⚠️ Connecte d’abord ton compte eBay.")
-        return redirect(url_for('index'))
+        flash("⚠️ Connecte d'abord ton compte eBay.")
+        return redirect(url_for('simple_index'))
 
     access_token = get_valid_token(user_id)
     if not access_token:
-        flash("❌ Impossible d’obtenir un token eBay valide.")
-        return redirect(url_for('index'))
+        flash("❌ Impossible d'obtenir un token eBay valide.")
+        return redirect(url_for('simple_index'))
 
     today_imported = get_import_count_today(user_id)
     remaining_quota = max(0, MAX_PER_DAY - today_imported)
+    
     if remaining_quota <= 0:
         flash("⚠️ Quota journalier atteint (2000).")
-        return redirect(url_for('index'))
+        return redirect(url_for('simple_index'))
 
     target_count = min(MAX_PER_FILE, remaining_quota)
     items = fetch_active_items(access_token, target_count)
+    
     if not items:
         flash("📭 Aucune annonce active trouvée sur eBay.")
-        return redirect(url_for('index'))
+        return redirect(url_for('simple_index'))
 
     df = pd.DataFrame(items)
-    
-    # Réorganiser les colonnes pour un meilleur affichage
     column_order = ['sku', 'titre', 'description', 'prix', 'stock', 'condition', 'categorie', 'image_url']
     df = df[column_order]
     
     csv_path = os.path.join(UPLOAD_FOLDER, f"{user_id}_ebay_{uuid.uuid4().hex}.csv")
     df.to_csv(csv_path, index=False, encoding='utf-8-sig')
     set_last_csv_path(user_id, csv_path)
-    
-    # Mettre à jour le compteur d'imports
     add_import(user_id, len(items))
 
     flash(f"✅ CSV eBay prêt avec {len(df)} annonces.")
-    return send_file(csv_path, as_attachment=True, download_name=f"ebay_annonces_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", mimetype="text/csv")
+    
+    return send_file(
+        csv_path, 
+        as_attachment=True, 
+        download_name=f"ebay_annonces_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", 
+        mimetype="text/csv"
+    )
 
-# --- Route pour voir le dernier CSV (optionnel) ---
-@app.route('/view_last_csv')
-def view_last_csv():
-    user_id = session.get('user_id')
-    if not user_id:
-        flash("⚠️ Non connecté")
-        return redirect(url_for('index'))
-    
-    last_csv = get_last_csv_path(user_id)
-    if not last_csv or not os.path.exists(last_csv):
-        flash("📭 Aucun CSV trouvé")
-        return redirect(url_for('index'))
-    
-    try:
-        df = pd.read_csv(last_csv)
-        return df.to_html()
-    except Exception as e:
-        flash(f"❌ Erreur lecture CSV: {e}")
-        return redirect(url_for('index'))
-
-# --- Nettoyage des anciens fichiers CSV ---
-@app.route('/cleanup_csv')
-def cleanup_csv():
-    user_id = session.get('user_id')
-    if not user_id:
-        flash("⚠️ Non connecté")
-        return redirect(url_for('index'))
-    
-    last_csv = get_last_csv_path(user_id)
-    if last_csv and os.path.exists(last_csv):
-        os.remove(last_csv)
-        set_last_csv_path(user_id, None)
-        flash("🧹 CSV supprimé")
-    else:
-        flash("ℹ️ Aucun CSV à supprimer")
-    
-    return redirect(url_for('index'))
+@app.route('/reconnect')
+def reconnect():
+    """Page pour reconnecter eBay quand le token est expiré"""
+    return render_template('reconnect.html')
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
