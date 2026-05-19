@@ -12,6 +12,10 @@ import logging
 app = Flask(__name__)
 app.secret_key = 'UN_SECRET_POUR_SESSION'
 
+# --- AJOUT POUR PROXY (important pour Render avec domaine personnalisé) ---
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
 # --- Configuration ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
@@ -21,7 +25,7 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 # --- Configuration eBay API ---
 EBAY_CLIENT_ID = 'AlexBoss-eVendImp-PRD-bd29c22a7-4a223ad6'
 EBAY_CLIENT_SECRET = 'PRD-d29c22a7bc6d-e864-4ffc-8934-e19a'
-EBAY_REDIRECT_URI = 'https://evend-import-oauth.onrender.com/ebay_callback'
+EBAY_REDIRECT_URI = 'https://www.e-vend.ca/ebayimportscv/ebay_callback'
 EBAY_OAUTH_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
 EBAY_TRADING_API_URL = "https://api.ebay.com/ws/api.dll"
 EBAY_COMPAT_LEVEL = "1191"
