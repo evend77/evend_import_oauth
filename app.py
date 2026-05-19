@@ -1,242 +1,27 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file, jsonify
-import os, pandas as pd, requests, subprocess, uuid, sqlite3
+import os
+import pandas as pd
+import requests
+import uuid
+import sqlite3
 from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
 import urllib.parse
 import logging
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-import threading
-from threading import Thread
-import selenium_runner.runner as selenium_runner
 
-import os
-
-# --- Création de l'app Flask ---
 app = Flask(__name__)
 app.secret_key = 'UN_SECRET_POUR_SESSION'  # ⚠️ change-le en prod
 
-# --- Config Upload accessible en écriture ---
+# --- Configuration ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-SELENIUM_SCRIPT = os.path.join(BASE_DIR, 'evend_publish.py')
-
-# --- Log global thread-safe ---
-log_lock = threading.Lock()
-
-# --- Nettoyage CSV au démarrage ---
-for f in os.listdir(UPLOAD_FOLDER):
-    file_path = os.path.join(UPLOAD_FOLDER, f)
-    try:
-        # Supprimer uniquement les CSV temporaires
-        if os.path.isfile(file_path) and f.endswith(".csv"):
-            os.remove(file_path)
-            print(f"🧹 CSV supprimé: {f}")
-        # Si tu as des dossiers temporaires à nettoyer, tu peux les gérer ici
-        # elif os.path.isdir(file_path):
-        #     import shutil
-        #     shutil.rmtree(file_path)
-        #     print(f"🧹 Dossier supprimé: {f}")
-    except Exception as e:
-        print(f"❌ Impossible de supprimer {f}: {e}")
-
-
-
-
-# --- Ajouter log utilisateur ---
-def add_user_log_file(user_id, message):
-    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
-    try:
-        with open(log_file, 'a', encoding='utf-8') as f:
-            f.write(f"[{datetime.utcnow().isoformat()}] {message}\n")
-    except Exception as e:
-        print(f"❌ Impossible d'écrire dans le log {log_file}: {e}")
-
-
-@app.route('/import', methods=['POST'])
-def import_file():
-    user_id = session.get("user_id")
-    if not user_id:
-        flash("⚠️ Utilisateur non connecté")
-        return redirect(url_for("index"))
-
-    # Récupérer email + mot de passe
-    session["evend_email"] = request.form.get("evend_email")
-    session["evend_password"] = request.form.get("evend_password")
-
-    # Vérifier
-    if not session["evend_email"] or not session["evend_password"]:
-        flash("❌ Email ou mot de passe e-Vend manquant")
-        return redirect(url_for("index"))
-
-    # Récupération du fichier CSV
-    file = request.files["file"]
-    if not file:
-        flash("❌ Aucun fichier fourni")
-        return redirect(url_for("index"))
-
-    filename = f"csv_ebay_import_{uuid.uuid4().hex}.csv"
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
-    file.save(file_path)
-
-    add_user_log_file(user_id, f"📂 Fichier {file.filename} reçu et sauvegardé sous {filename}")
-
-    # Lire CSV (juste pour compter)
-    df = pd.read_csv(file_path)
-    nb_items = len(df)
-    add_user_log_file(user_id, f"📑 Lecture du CSV terminée : {nb_items} lignes trouvées")
-
-    # --- Préparer les variables d'environnement pour Selenium ---
-    env_vars = os.environ.copy()
-    env_vars["EVEND_EMAIL"] = session.get("evend_email")
-    env_vars["EVEND_PASSWORD"] = session.get("evend_password")
-
-    try:
-        add_user_log_file(user_id, f"🚀 Lancement Selenium pour {nb_items} articles depuis {file_path}")
-
-        launch_selenium_import(user_id, file_path, env_vars)
-
-        add_import(user_id, nb_items)
-        flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
-        add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
-
-    except Exception as e:
-        flash(f"❌ Impossible de lancer l'import : {e}")
-        add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
-
-    return redirect(url_for("index"))
-
-
-
-# =====================================================
-# 🔹 ROUTE IMPORT LOG - permet de récupérer le log d'import
-# =====================================================
-from collections import deque
-
-@app.route('/get_import_log')
-def get_import_log():
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({"log": "⚠️ Session expirée ou utilisateur non identifié."})
-
-    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
-    if not os.path.exists(log_file):
-        open(log_file, 'a').close()
-        return jsonify({"log": "ℹ️ Log créé, en attente d’événements..."})
-
-    try:
-        with log_lock:
-            with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
-                last_lines = deque(f, maxlen=500)  # 500 dernières lignes
-                logs = ''.join(last_lines)
-    except Exception as e:
-        logs = f"❌ Impossible de lire le fichier de log: {e}"
-
-    return jsonify({"log": logs})
-
-
-# =====================================================
-# 🔹 ROUTE SELENIUM LOG - permet de récupérer le log du bot Selenium
-# =====================================================
-@app.route('/get_selenium_log')
-def get_selenium_log():
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({"log": "⚠️ Session expirée ou utilisateur non identifié."})
-
-    log_file = os.path.join(UPLOAD_FOLDER, f"{user_id}_selenium_log.txt")
-    if not os.path.exists(log_file):
-        open(log_file, 'a').close()
-        return jsonify({"log": "ℹ️ Log Selenium créé, en attente d’événements..."})
-
-    try:
-        with log_lock:
-            with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
-                last_lines = deque(f, maxlen=500)  # 500 dernières lignes
-                logs = ''.join(last_lines)
-    except Exception as e:
-        logs = f"❌ Impossible de lire le fichier Selenium log: {e}"
-
-    return jsonify({"log": logs})
-
-
-# =====================================================
-# 🔹 VÉRIFICATION AU LANCEMENT
-# =====================================================
-try:
-    test_user = "startup_check"
-    test_message = "✅ UPLOAD_FOLDER accessible et log OK"
-    add_user_log_file(test_user, test_message)
-    print(f"[INIT] Dossier UPLOAD_FOLDER OK -> {UPLOAD_FOLDER}")
-except Exception as e:
-    print(f"[INIT] ❌ Erreur accès UPLOAD_FOLDER {UPLOAD_FOLDER}: {e}")
-
-
-# =====================================================
-# 🔹 LANCEMENT SELENIUM IMPORT
-# =====================================================
-def launch_selenium_import(user_id, file_path, env_vars):
-    """
-    Lance le script Selenium pour publier les articles e-Vend sur e-Vend.
-    - Logs Selenium dans <user_id>_selenium_log.txt
-    - Logs import dans <user_id>_import_log.txt
-    - Compatible Render
-    """
-    import subprocess, os, threading
-
-    # --- Chemins des logs ---
-    import_log = os.path.join(UPLOAD_FOLDER, f"{user_id}_import_log.txt")
-    selenium_log = os.path.join(UPLOAD_FOLDER, f"{user_id}_selenium_log.txt")
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-    # --- Notifier dans le log import ---
-    add_user_log_file(user_id, f"🚀 Lancement Selenium pour {file_path}")
-
-    # --- Ouverture du log Selenium en mode append sans fermer ---
-    try:
-        # Garde le fichier ouvert et flush automatique
-        f_selenium = open(selenium_log, 'a', encoding='utf-8', buffering=1)
-
-        # Commande pour lancer le script Selenium en mode non-bufferisé
-        cmd = ['python3', '-u', SELENIUM_SCRIPT, file_path]
-
-        # --- Lancement du subprocess ---
-        proc = subprocess.Popen(
-            cmd,
-            env=env_vars,
-            stdout=f_selenium,
-            stderr=f_selenium
-        )
-
-        # --- Thread pour surveiller le subprocess et écrire fin dans log import ---
-        def monitor_process(p, user_id):
-            p.wait()  # attend la fin du processus
-            add_user_log_file(user_id, f"✅ Selenium terminé pour {file_path} (exit {p.returncode})")
-            f_selenium.close()
-
-        threading.Thread(target=monitor_process, args=(proc, user_id), daemon=True).start()
-
-        # --- Confirmer dans le log import que le lancement a réussi ---
-        add_user_log_file(user_id, f"✅ Import Selenium lancé pour {file_path}")
-
-    except Exception as e:
-        add_user_log_file(user_id, f"❌ Impossible de lancer l'import Selenium: {e}")
-
-
-
-
-
-
-
-
-
-# --- eBay API PROD ---
+# --- Configuration eBay API ---
 EBAY_CLIENT_ID = 'AlexBoss-eVendImp-PRD-bd29c22a7-4a223ad6'
 EBAY_CLIENT_SECRET = 'PRD-d29c22a7bc6d-e864-4ffc-8934-e19a'
-EBAY_REDIRECT_URI = 'https://evend-import.onrender.com/ebay_callback'  # À changer pour Render
+EBAY_REDIRECT_URI = 'https://evend-import.onrender.com/ebay_callback'
 EBAY_OAUTH_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
 EBAY_TRADING_API_URL = "https://api.ebay.com/ws/api.dll"
 EBAY_COMPAT_LEVEL = "1191"
@@ -303,12 +88,6 @@ def set_last_csv_path(user_id, path_or_none):
     conn.execute("UPDATE users SET last_csv_path=? WHERE id=?", (path_or_none, user_id))
     conn.commit()
     conn.close()
-
-def get_last_csv_path(user_id):
-    conn = get_db()
-    row = conn.execute("SELECT last_csv_path FROM users WHERE id=?", (user_id,)).fetchone()
-    conn.close()
-    return row['last_csv_path'] if row else None
 
 def add_import(user_id, count):
     today = datetime.utcnow().date().isoformat()
@@ -482,7 +261,7 @@ def index():
     remaining_quota = 0
     if user_id:
         tokens = get_user_tokens(user_id)
-        if tokens:
+        if tokens and tokens.get('access_token'):
             connected = True
             today_imported = get_import_count_today(user_id)
             remaining_quota = max(0, MAX_PER_DAY - today_imported)
@@ -560,201 +339,58 @@ def download_ebay_csv():
         return redirect(url_for('index'))
 
     df = pd.DataFrame(items)
+    
+    # Réorganiser les colonnes pour un meilleur affichage
+    column_order = ['sku', 'titre', 'description', 'prix', 'stock', 'condition', 'categorie', 'image_url']
+    df = df[column_order]
+    
     csv_path = os.path.join(UPLOAD_FOLDER, f"{user_id}_ebay_{uuid.uuid4().hex}.csv")
-    df.to_csv(csv_path, index=False)
+    df.to_csv(csv_path, index=False, encoding='utf-8-sig')
     set_last_csv_path(user_id, csv_path)
+    
+    # Mettre à jour le compteur d'imports
+    add_import(user_id, len(items))
 
     flash(f"✅ CSV eBay prêt avec {len(df)} annonces.")
-    return send_file(csv_path, as_attachment=True, download_name="csv_ebay_pret.csv", mimetype="text/csv")
+    return send_file(csv_path, as_attachment=True, download_name=f"ebay_annonces_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", mimetype="text/csv")
 
-# --- Import e-Vend ---
-@app.route('/post_evend', methods=['POST'])
-def post_evend():
+# --- Route pour voir le dernier CSV (optionnel) ---
+@app.route('/view_last_csv')
+def view_last_csv():
     user_id = session.get('user_id')
     if not user_id:
-        flash("⚠️ Session expirée.")
+        flash("⚠️ Non connecté")
         return redirect(url_for('index'))
-
-    access_token = get_valid_token(user_id)
-    if not access_token:
-        flash("⚠️ Connecte d’abord ton compte eBay.")
-        return redirect(url_for('login_ebay'))
-
-    # --- Vérifier si un nouveau fichier CSV est uploadé ---
-    file = request.files.get('csv_file')
-    if file and file.filename != '':
-        safe_filename = f"csv_ebay_import_{uuid.uuid4().hex}.csv"
-        file_path = os.path.join(UPLOAD_FOLDER, safe_filename)
-        file.save(file_path)
-        set_last_csv_path(user_id, file_path)
-        add_user_log_file(user_id, "-------------------- NOUVEL IMPORT --------------------")
-        add_user_log_file(user_id, f"📂 Fichier {file.filename} reçu et sauvegardé sous {safe_filename}")
-    else:
-        file_path = get_last_csv_path(user_id)
-        if not file_path or not os.path.exists(file_path):
-            flash("⚠️ Aucun fichier CSV disponible pour l'import.")
-            return redirect(url_for('index'))
-        add_user_log_file(user_id, "-------------------- REUTILISATION DU CSV EXISTANT --------------------")
-        add_user_log_file(user_id, f"📂 Utilisation du dernier CSV existant : {file_path}")
-
-    # --- Lecture CSV ---
+    
+    last_csv = get_last_csv_path(user_id)
+    if not last_csv or not os.path.exists(last_csv):
+        flash("📭 Aucun CSV trouvé")
+        return redirect(url_for('index'))
+    
     try:
-        df = pd.read_csv(file_path)
-        nb_items = len(df.index)
-        add_user_log_file(user_id, f"📑 Lecture du CSV terminée : {nb_items} lignes trouvées")
+        df = pd.read_csv(last_csv)
+        return df.to_html()
     except Exception as e:
-        flash(f"❌ CSV invalide: {e}")
-        add_user_log_file(user_id, f"❌ CSV invalide : {e}")
+        flash(f"❌ Erreur lecture CSV: {e}")
         return redirect(url_for('index'))
 
-    # --- Vérifier quota journalier ---
-    today_imported = get_import_count_today(user_id)
-    remaining_quota = max(0, MAX_PER_DAY - today_imported)
-    if nb_items > remaining_quota:
-        flash(f"⚠️ Quota restant: {remaining_quota}, ton fichier contient {nb_items}.")
-        add_user_log_file(user_id, f"⚠️ Import annulé : quota restant {remaining_quota}, fichier {nb_items}")
-        return redirect(url_for('index'))
-
-    # --- Préparer les variables d'environnement pour Selenium ---
-    env_vars = os.environ.copy()
-    env_vars["EVEND_EMAIL"] = request.form.get("evend_email", "")
-    env_vars["EVEND_PASSWORD"] = request.form.get("evend_password", "")
-
-    form_keys = [
-        "type_annonce", "categorie", "titre", "description",
-        "condition", "retour", "garantie", "prix", "stock",
-        "frais_port_article", "frais_port_sup", "photo_defaut",
-        "livraison_ramassage_check", "livraison_expedition_check", "livraison_ramassage"
-    ]
-
-    for key in form_keys:
-        env_vars[key] = request.form.get(key, "")
-
-    env_vars["livraison_ramassage_check"] = "on" if request.form.get("livraison_ramassage_check") else ""
-    env_vars["livraison_expedition_check"] = "on" if request.form.get("livraison_expedition_check") else ""
-
-    # --- Lancer Selenium en arrière-plan et mettre à jour DB/log ---
-    try:
-        add_user_log_file(user_id, f"🚀 Lancement Selenium pour {nb_items} articles depuis {file_path}")
-        launch_selenium_import(user_id, file_path, env_vars)
-        add_import(user_id, nb_items)
-        flash("✅ Import lancé en arrière-plan. Les articles seront publiés sur e-Vend bientôt.")
-        add_user_log_file(user_id, f"✅ Import démarré, {nb_items} articles en cours de traitement")
-    except Exception as e:
-        flash(f"❌ Impossible de lancer l'import en arrière-plan: {e}")
-        add_user_log_file(user_id, f"❌ Erreur lancement Selenium : {e}")
-
-    return redirect(url_for('index'))
-
-
-# --- Réinitialiser dernier CSV ---
-@app.route('/reset_csv', methods=['GET', 'POST'])
-def reset_csv():
-    if request.method == 'GET':
-        return redirect(url_for('index'))
-
+# --- Nettoyage des anciens fichiers CSV ---
+@app.route('/cleanup_csv')
+def cleanup_csv():
     user_id = session.get('user_id')
     if not user_id:
-        flash("⚠️ Session expirée.")
+        flash("⚠️ Non connecté")
         return redirect(url_for('index'))
-
+    
     last_csv = get_last_csv_path(user_id)
     if last_csv and os.path.exists(last_csv):
         os.remove(last_csv)
         set_last_csv_path(user_id, None)
-        flash("🧹 Dernier CSV eBay supprimé.")
+        flash("🧹 CSV supprimé")
     else:
-        flash("ℹ️ Aucun CSV précédent à supprimer.")
-
+        flash("ℹ️ Aucun CSV à supprimer")
+    
     return redirect(url_for('index'))
-
-
-
-
-
-
-
-
-import json
-
-@app.route("/account_deletion", methods=["POST"])
-def account_deletion():
-    """
-    Endpoint pour recevoir les notifications de suppression de compte eBay.
-    - Accepte les requêtes POST JSON.
-    - Logue le contenu reçu dans Render et stocke dans un fichier historique.
-    - Retourne toujours un status 200 pour eBay.
-    """
-    try:
-        # Lecture du JSON envoyé par eBay
-        data = request.get_json(force=True, silent=True) or {}
-        print("🔔 Notification eBay reçue :", data)
-
-        # Stocker la notification dans un fichier historique
-        history_file = os.path.join(UPLOAD_FOLDER, "account_deletion_history.json")
-        if os.path.exists(history_file):
-            with open(history_file, "r", encoding="utf-8") as f:
-                history = json.load(f)
-        else:
-            history = []
-
-        history.append({
-            "timestamp": datetime.utcnow().isoformat(),
-            "data": data
-        })
-
-        with open(history_file, "w", encoding="utf-8") as f:
-            json.dump(history, f, ensure_ascii=False, indent=2)
-
-        return jsonify({"status": "received"}), 200
-
-    except Exception as e:
-        print("❌ Erreur account_deletion :", e)
-        return jsonify({"status": "error", "message": str(e)}), 400
-
-
-@app.route('/test_bot')
-def test_bot():
-    """
-    Lance un test du bot evend_bot_test.py en arrière-plan.
-    - Écrit stdout et stderr dans /uploads/bot_test_log.txt
-    """
-    import subprocess
-    import os
-
-    log_file = os.path.join(UPLOAD_FOLDER, "bot_test_log.txt")
-    try:
-        with open(log_file, 'w', encoding='utf-8') as f:
-            subprocess.Popen(
-                ["python3", os.path.join(BASE_DIR, "evend_bot_test.py")],
-                stdout=f,
-                stderr=f,
-                start_new_session=True  # Détache le processus du serveur Flask
-            )
-        return "✅ Test lancé. Vérifie le log dans /uploads/bot_test_log.txt"
-    except Exception as e:
-        print("❌ Erreur lancement test_bot :", e)
-        return f"❌ Impossible de lancer le test : {e}"
-
-# --- Lancer Selenium watcher en arrière-plan ---
-def start_selenium_watcher():
-    t = Thread(target=selenium_runner.watch_folder, daemon=True)
-    t.start()
-    print("🚀 Selenium watcher démarré en arrière-plan")
-
-start_selenium_watcher()
-
-
-
-@app.route("/view_account_deletion_history")
-def view_account_deletion_history():
-    history_file = os.path.join(UPLOAD_FOLDER, "account_deletion_history.json")
-    if os.path.exists(history_file):
-        with open(history_file, "r", encoding="utf-8") as f:
-            content = f.read()
-        return f"<pre>{content}</pre>"
-    else:
-        return "⚠️ Aucun historique trouvé."
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
