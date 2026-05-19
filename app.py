@@ -258,7 +258,7 @@ def fetch_active_items(oauth_token, max_items=MAX_PER_FILE):
 
 @app.route('/')
 def index():
-    """Ancienne route - garde ton ancien index.html intact"""
+    """Route principale - utilise index1.html"""
     user_id = session.get('user_id')
     connected = False
     today_imported = 0
@@ -269,21 +269,10 @@ def index():
             connected = True
             today_imported = get_import_count_today(user_id)
             remaining_quota = max(0, MAX_PER_DAY - today_imported)
-    return render_template('index.html',
+    return render_template('index1.html',
                            connected=connected,
                            today_imported=today_imported,
                            remaining_quota=remaining_quota)
-
-@app.route('/simple')
-def simple_index():
-    """Nouvelle route simple - utilise index1.html"""
-    user_id = session.get('user_id')
-    connected = False
-    if user_id:
-        access_token = get_valid_token(user_id)
-        if access_token:
-            connected = True
-    return render_template('index1.html', connected=connected)
 
 @app.route('/login_ebay')
 def login_ebay():
@@ -302,7 +291,7 @@ def ebay_callback():
     code = request.args.get('code')
     if not code:
         flash("❌ OAuth eBay échoué.")
-        return redirect(url_for('simple_index'))
+        return redirect(url_for('index'))
     
     user_id = session['user_id']
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -327,7 +316,7 @@ def ebay_callback():
     except Exception as e:
         flash(f"❌ Erreur lors de la connexion: {e}")
     
-    return redirect(url_for('simple_index'))
+    return redirect(url_for('index'))
 
 @app.route('/logout_ebay')
 def logout_ebay():
@@ -339,33 +328,33 @@ def logout_ebay():
         conn.close()
     session.pop('user_id', None)
     flash("✅ Vous vous êtes déconnecté de eBay.")
-    return redirect(url_for('simple_index'))
+    return redirect(url_for('index'))
 
 @app.route('/download_ebay_csv')
 def download_ebay_csv():
     user_id = session.get('user_id')
     if not user_id or not get_user_tokens(user_id):
         flash("⚠️ Connecte d'abord ton compte eBay.")
-        return redirect(url_for('simple_index'))
+        return redirect(url_for('index'))
 
     access_token = get_valid_token(user_id)
     if not access_token:
         flash("❌ Impossible d'obtenir un token eBay valide.")
-        return redirect(url_for('simple_index'))
+        return redirect(url_for('index'))
 
     today_imported = get_import_count_today(user_id)
     remaining_quota = max(0, MAX_PER_DAY - today_imported)
     
     if remaining_quota <= 0:
         flash("⚠️ Quota journalier atteint (2000).")
-        return redirect(url_for('simple_index'))
+        return redirect(url_for('index'))
 
     target_count = min(MAX_PER_FILE, remaining_quota)
     items = fetch_active_items(access_token, target_count)
     
     if not items:
         flash("📭 Aucune annonce active trouvée sur eBay.")
-        return redirect(url_for('simple_index'))
+        return redirect(url_for('index'))
 
     df = pd.DataFrame(items)
     column_order = ['sku', 'titre', 'description', 'prix', 'stock', 'condition', 'categorie', 'image_url']
